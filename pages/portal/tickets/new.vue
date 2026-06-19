@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { z } from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { IssuePriority } from '~/types/database'
+import type { IssuePriority, TicketCategory } from '~/types/database'
 
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const toast = useToast()
 const { customerId } = useCurrentProfile()
 const { ISSUE_PRIORITIES } = useIssueMeta()
+const { TICKET_CATEGORIES } = useTicketMeta()
 
 if (!customerId.value) {
   // Unallocated users can't raise tickets.
@@ -17,12 +18,19 @@ if (!customerId.value) {
 const schema = z.object({
   subject: z.string().min(3, 'Please add a subject'),
   body: z.string().optional(),
+  category: z.enum(['bug', 'update', 'feature', 'task', 'enquiry', 'other']),
   priority: z.enum(['low', 'medium', 'high', 'urgent']),
 })
 type Schema = z.output<typeof schema>
 
-const state = reactive<Partial<Schema>>({ subject: '', body: '', priority: 'medium' as IssuePriority })
+const state = reactive<Partial<Schema>>({
+  subject: '',
+  body: '',
+  category: 'enquiry' as TicketCategory,
+  priority: 'medium' as IssuePriority,
+})
 const priorityItems = ISSUE_PRIORITIES.map((p) => ({ label: p.label, value: p.value, icon: p.icon }))
+const categoryItems = TICKET_CATEGORIES.map((c) => ({ label: c.label, value: c.value, icon: c.icon }))
 
 const pendingFiles = ref<File[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -47,6 +55,7 @@ async function submit(event: FormSubmitEvent<Schema>) {
         customer_id: customerId.value,
         subject: event.data.subject,
         body: richTextOrNull(event.data.body),
+        category: event.data.category,
         priority: event.data.priority,
         created_by: user.value.id,
       })
@@ -101,9 +110,14 @@ async function submit(event: FormSubmitEvent<Schema>) {
             <RichTextEditor v-model="state.body" placeholder="Describe the issue or request..." />
           </UFormField>
 
-          <UFormField label="Priority" name="priority">
-            <USelectMenu v-model="state.priority" :items="priorityItems" value-key="value" class="w-full sm:w-60" />
-          </UFormField>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <UFormField label="Category" name="category">
+              <USelectMenu v-model="state.category" :items="categoryItems" value-key="value" class="w-full" />
+            </UFormField>
+            <UFormField label="Priority" name="priority">
+              <USelectMenu v-model="state.priority" :items="priorityItems" value-key="value" class="w-full" />
+            </UFormField>
+          </div>
 
           <UFormField label="Attachments">
             <div class="space-y-2">

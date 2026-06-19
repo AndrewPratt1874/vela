@@ -2,6 +2,7 @@ export type IssueStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cance
 export type IssuePriority = 'low' | 'medium' | 'high' | 'urgent'
 export type IssueType = 'bug' | 'feature' | 'task' | 'improvement'
 export type TicketStatus = 'open' | 'in_progress' | 'waiting_on_customer' | 'resolved' | 'closed'
+export type TicketCategory = 'bug' | 'update' | 'feature' | 'task' | 'enquiry' | 'other'
 
 export type UserStatus = 'pending' | 'approved' | 'rejected'
 
@@ -84,6 +85,7 @@ export type Ticket = {
   body: string | null
   status: TicketStatus
   priority: IssuePriority
+  category: TicketCategory
   created_by: string
   assigned_to: string | null
   created_at: string
@@ -235,6 +237,7 @@ export interface Database {
       issue_priority: IssuePriority
       issue_type: IssueType
       ticket_status: TicketStatus
+      ticket_category: TicketCategory
     }
     CompositeTypes: Record<string, never>
   }

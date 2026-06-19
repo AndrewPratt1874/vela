@@ -4,7 +4,7 @@ import type { Ticket } from '~/types/database'
 
 const supabase = useSupabaseClient()
 const { customerId } = useCurrentProfile()
-const { statusMap } = useTicketMeta()
+const { statusMap, categoryMap } = useTicketMeta()
 
 const { data: tickets } = await useAsyncData('portal-tickets', async () => {
   if (!customerId.value) return []
@@ -47,6 +47,7 @@ function timeAgo(iso: string) {
             <UIcon :name="statusMap[t.status].icon" :class="`text-${statusMap[t.status].color}`" class="size-4 shrink-0" />
             <span class="text-xs text-muted font-mono shrink-0 w-10">#{{ t.number }}</span>
             <span class="text-sm flex-1 truncate">{{ t.subject }}</span>
+            <UBadge variant="soft" :color="categoryMap[t.category].color" :label="categoryMap[t.category].label" size="sm" class="hidden sm:inline-flex" />
             <UBadge variant="subtle" :color="statusMap[t.status].color" :label="statusMap[t.status].label" size="sm" />
             <span class="text-xs text-dimmed shrink-0 hidden sm:inline">{{ timeAgo(t.updated_at) }}</span>
           </NuxtLink>

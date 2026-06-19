@@ -9,7 +9,7 @@ const toast = useToast()
 const user = useSupabaseUser()
 const id = computed(() => route.params.id as string)
 
-const { TICKET_STATUSES, statusMap } = useTicketMeta()
+const { TICKET_STATUSES, TICKET_CATEGORIES, statusMap } = useTicketMeta()
 const { ISSUE_PRIORITIES } = useIssueMeta()
 
 const { data: ticket, refresh } = await useAsyncData(`staff-ticket-${id.value}`, async () => {
@@ -35,6 +35,7 @@ const { data: staff } = await useAsyncData('staff-list', async () => {
 })
 
 const statusItems = TICKET_STATUSES.map((s) => ({ label: s.label, value: s.value, icon: s.icon }))
+const categoryItems = TICKET_CATEGORIES.map((c) => ({ label: c.label, value: c.value, icon: c.icon }))
 const priorityItems = ISSUE_PRIORITIES.map((p) => ({ label: p.label, value: p.value, icon: p.icon }))
 const assigneeItems = computed(() => [
   { label: 'Unassigned', value: null },
@@ -144,6 +145,16 @@ async function promote() {
               value-key="value"
               class="w-full"
               @update:model-value="(v: any) => update({ status: v }, 'status')"
+            />
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-wide text-muted mb-1">Category</p>
+            <USelectMenu
+              :model-value="ticket!.category"
+              :items="categoryItems"
+              value-key="value"
+              class="w-full"
+              @update:model-value="(v: any) => update({ category: v })"
             />
           </div>
           <div>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { formatDistanceToNow } from 'date-fns'
-import type { Customer, PersonRef, Ticket, TicketStatus } from '~/types/database'
+import type { Customer, PersonRef, Ticket, TicketCategory, TicketStatus } from '~/types/database'
 
 definePageMeta({ middleware: 'staff' })
 
 const supabase = useSupabaseClient()
-const { TICKET_STATUSES, statusMap } = useTicketMeta()
+const { TICKET_STATUSES, TICKET_CATEGORIES, statusMap, categoryMap } = useTicketMeta()
 
 type Row = Ticket & {
   customer: Pick<Customer, 'id' | 'name' | 'slug'> | null
@@ -21,12 +21,15 @@ const { data: tickets } = await useAsyncData('staff-tickets', async () => {
 })
 
 const statusFilter = ref<TicketStatus[]>([])
+const categoryFilter = ref<TicketCategory[]>([])
 const search = ref('')
 const statusItems = TICKET_STATUSES.map((s) => ({ label: s.label, value: s.value, icon: s.icon }))
+const categoryItems = TICKET_CATEGORIES.map((c) => ({ label: c.label, value: c.value, icon: c.icon }))
 
 const filtered = computed(() =>
   (tickets.value ?? []).filter((t) => {
     if (statusFilter.value.length && !statusFilter.value.includes(t.status)) return false
+    if (categoryFilter.value.length && !categoryFilter.value.includes(t.category)) return false
     if (search.value && !t.subject.toLowerCase().includes(search.value.toLowerCase())) return false
     return true
   }),
@@ -61,6 +64,15 @@ function timeAgo(iso: string) {
             icon="i-lucide-circle-dot"
             size="sm"
           />
+          <USelectMenu
+            v-model="categoryFilter"
+            :items="categoryItems"
+            value-key="value"
+            multiple
+            placeholder="Category"
+            icon="i-lucide-tag"
+            size="sm"
+          />
         </template>
         <template #right>
           <span class="text-xs text-muted">{{ filtered.length }} / {{ tickets?.length ?? 0 }}</span>
@@ -81,6 +93,7 @@ function timeAgo(iso: string) {
             <UIcon :name="statusMap[t.status].icon" :class="`text-${statusMap[t.status].color}`" class="size-4 shrink-0" />
             <span class="text-xs text-muted font-mono shrink-0 w-10">#{{ t.number }}</span>
             <span class="text-sm flex-1 truncate">{{ t.subject }}</span>
+            <UBadge variant="soft" :color="categoryMap[t.category].color" :label="categoryMap[t.category].label" size="sm" class="hidden md:inline-flex" />
             <UBadge v-if="t.customer" variant="outline" color="neutral" size="sm" :label="t.customer.name" />
             <UBadge variant="subtle" :color="statusMap[t.status].color" :label="statusMap[t.status].label" size="sm" />
             <UAvatar

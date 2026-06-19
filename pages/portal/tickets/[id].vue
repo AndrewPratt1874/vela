@@ -3,7 +3,7 @@ import type { PersonRef, Ticket } from '~/types/database'
 
 const route = useRoute()
 const supabase = useSupabaseClient()
-const { statusMap } = useTicketMeta()
+const { statusMap, categoryMap } = useTicketMeta()
 const id = computed(() => route.params.id as string)
 
 const { data: ticket } = await useAsyncData(`portal-ticket-${id.value}`, async () => {
@@ -37,7 +37,10 @@ if (!ticket.value) {
       <div class="p-4 lg:p-6 max-w-3xl space-y-5">
         <div class="flex items-start justify-between gap-3">
           <h1 class="text-xl font-semibold">{{ ticket!.subject }}</h1>
-          <UBadge variant="subtle" :color="statusMap[ticket!.status].color" :label="statusMap[ticket!.status].label" />
+          <div class="flex items-center gap-2 shrink-0">
+            <UBadge variant="soft" :color="categoryMap[ticket!.category].color" :label="categoryMap[ticket!.category].label" />
+            <UBadge variant="subtle" :color="statusMap[ticket!.status].color" :label="statusMap[ticket!.status].label" />
+          </div>
         </div>
 
         <TicketConversation

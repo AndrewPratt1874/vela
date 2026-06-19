@@ -130,7 +130,7 @@ async function resendConfirmation() {
         />
       </UFormField>
 
-      <UFormField label="Email" name="email" required>
+      <UFormField label="Email" name="email">
         <UInput
           v-model="email"
           type="email"
@@ -142,19 +142,7 @@ async function resendConfirmation() {
         />
       </UFormField>
 
-      <UFormField name="password" required>
-        <template #label>
-          <div class="flex items-center justify-between">
-            <span>Password</span>
-            <UButton
-              v-if="!isSignup"
-              variant="link"
-              class="p-0 text-xs"
-              to="/forgot-password"
-              label="Forgot password?"
-            />
-          </div>
-        </template>
+      <UFormField label="Password" name="password">
         <UInput
           v-model="password"
           type="password"
@@ -173,12 +161,17 @@ async function resendConfirmation() {
     </form>
 
     <template v-if="!needsConfirm" #footer>
-      <p class="text-sm text-center text-muted">
-        {{ isSignup ? 'Already have an account?' : "Don't have an account?" }}
-        <UButton variant="link" class="p-0" @click="toggleMode">
-          {{ isSignup ? 'Sign in' : 'Create one' }}
-        </UButton>
-      </p>
+      <div class="space-y-2 text-center">
+        <p class="text-sm text-muted">
+          {{ isSignup ? 'Already have an account?' : "Don't have an account?" }}
+          <UButton variant="link" class="p-0" @click="toggleMode">
+            {{ isSignup ? 'Sign in' : 'Create one' }}
+          </UButton>
+        </p>
+        <p v-if="!isSignup">
+          <UButton variant="link" color="neutral" class="p-0 text-sm" to="/forgot-password" label="Forgot password?" />
+        </p>
+      </div>
     </template>
   </UCard>
 </template>

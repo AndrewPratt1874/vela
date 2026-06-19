@@ -1,9 +1,16 @@
-import type { TicketStatus } from '~/types/database'
+import type { TicketCategory, TicketStatus } from '~/types/database'
 
 type Color = 'neutral' | 'info' | 'primary' | 'success' | 'warning' | 'error'
 
 export interface TicketStatusMeta {
   value: TicketStatus
+  label: string
+  icon: string
+  color: Color
+}
+
+export interface TicketCategoryMeta {
+  value: TicketCategory
   label: string
   icon: string
   color: Color
@@ -17,11 +24,23 @@ export const TICKET_STATUSES: TicketStatusMeta[] = [
   { value: 'closed', label: 'Closed', icon: 'i-lucide-circle-x', color: 'neutral' },
 ]
 
+export const TICKET_CATEGORIES: TicketCategoryMeta[] = [
+  { value: 'bug', label: 'Bug', icon: 'i-lucide-bug', color: 'error' },
+  { value: 'update', label: 'Update', icon: 'i-lucide-refresh-cw', color: 'info' },
+  { value: 'feature', label: 'Feature', icon: 'i-lucide-sparkles', color: 'primary' },
+  { value: 'task', label: 'Task', icon: 'i-lucide-square-check-big', color: 'neutral' },
+  { value: 'enquiry', label: 'Enquiry', icon: 'i-lucide-message-circle-question', color: 'warning' },
+  { value: 'other', label: 'Other', icon: 'i-lucide-circle-help', color: 'neutral' },
+]
+
 export function useTicketMeta() {
   const statusMap = Object.fromEntries(
     TICKET_STATUSES.map((s) => [s.value, s]),
   ) as Record<TicketStatus, TicketStatusMeta>
-  return { TICKET_STATUSES, statusMap }
+  const categoryMap = Object.fromEntries(
+    TICKET_CATEGORIES.map((c) => [c.value, c]),
+  ) as Record<TicketCategory, TicketCategoryMeta>
+  return { TICKET_STATUSES, TICKET_CATEGORIES, statusMap, categoryMap }
 }
 
 /** Fire-and-forget email notification for a ticket event. */
