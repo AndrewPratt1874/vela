@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Issue, IssuePriority, IssueStatus, IssueType, IssueWithPeople, Label, PersonRef, Project } from '~/types/database'
+import type { Issue, IssuePriority, IssueStatus, IssueType, IssueWithPeople, Label, Project } from '~/types/database'
 
 const route = useRoute()
 const supabase = useSupabaseClient()
@@ -45,13 +45,8 @@ const { data: issues, refresh } = await useAsyncData(
   { watch: [() => project.value?.id] },
 )
 
-const { data: members } = await useAsyncData(`list-members-${project.value.id}`, async () => {
-  const { data } = await supabase
-    .from('project_members')
-    .select('profile:profiles(id, full_name, email, avatar_url)')
-    .eq('project_id', project.value!.id)
-  return ((data ?? []).map((m: any) => m.profile).filter(Boolean)) as PersonRef[]
-})
+// Assignable to anyone on the project plus all approved staff.
+const { assignees: members } = await useProjectAssignees(project.value.id)
 
 const filtered = computed(() => {
   return (issues.value ?? []).filter((issue) => {

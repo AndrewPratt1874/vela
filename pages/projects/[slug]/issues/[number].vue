@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatDistanceToNow } from 'date-fns'
-import type { IssuePriority, IssueStatus, IssueType, IssueWithPeople, Profile, Project } from '~/types/database'
+import type { IssuePriority, IssueStatus, IssueType, IssueWithPeople, Project } from '~/types/database'
 
 const route = useRoute()
 const supabase = useSupabaseClient()
@@ -37,13 +37,8 @@ if (!issue.value) {
   throw createError({ statusCode: 404, statusMessage: 'Issue not found' })
 }
 
-const { data: members } = await useAsyncData(`issue-members-${project.value.id}`, async () => {
-  const { data } = await supabase
-    .from('project_members')
-    .select('profile:profiles(id, full_name, email, avatar_url)')
-    .eq('project_id', project.value!.id)
-  return ((data ?? []).map((m: any) => m.profile).filter(Boolean)) as Profile[]
-})
+// Assignable to anyone on the project plus all approved staff.
+const { assignees: members } = await useProjectAssignees(project.value.id)
 
 const { labels, createLabel, setIssueLabels } = useLabels(() => project.value?.id)
 

@@ -98,7 +98,7 @@ async function resendConfirmation() {
         <img src="/logo.png" alt="Vela" class="size-12 rounded-lg" />
         <h1 class="text-xl font-semibold">{{ $config.public.appName }}</h1>
         <p class="text-sm text-muted text-balance">
-          Track projects and issues, and keep your customers in the loop.
+          Stay on course — with Codable.
         </p>
       </div>
     </template>
