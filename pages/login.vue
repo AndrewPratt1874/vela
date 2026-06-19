@@ -36,6 +36,9 @@ async function submit() {
         },
       })
       if (error) throw error
+      // Best-effort: alert staff that someone is awaiting approval. The profile
+      // is created synchronously by the signup trigger, so it exists by now.
+      $fetch('/api/notify-registration', { method: 'POST', body: { email: email.value } }).catch(() => {})
       // If email confirmation is enabled, there is no session yet.
       if (!data.session) {
         needsConfirm.value = true

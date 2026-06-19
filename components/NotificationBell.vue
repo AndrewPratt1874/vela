@@ -8,6 +8,7 @@ const { isStaff } = useCurrentProfile()
 const open = ref(false)
 
 function linkFor(n: Notification) {
+  if (n.type === 'user_registered') return isStaff.value ? '/users' : undefined
   if (!n.ticket_id) return undefined
   return isStaff.value ? `/tickets/${n.ticket_id}` : `/portal/tickets/${n.ticket_id}`
 }
