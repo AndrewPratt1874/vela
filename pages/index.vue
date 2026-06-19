@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { IssueWithPeople, Project } from '~/types/database'
+import type { Customer, IssueWithPeople, Project } from '~/types/database'
+
+type ProjectWithCustomer = Project & { customer: Pick<Customer, 'id' | 'name' | 'slug' | 'logo_url'> | null }
 
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
@@ -16,10 +18,10 @@ watchEffect(() => {
 const { data: projects } = await useAsyncData('overview-projects', async () => {
   const { data } = await supabase
     .from('projects')
-    .select('*')
+    .select('*, customer:customers(id, name, slug, logo_url)')
     .order('updated_at', { ascending: false })
     .limit(6)
-  return (data ?? []) as Project[]
+  return (data ?? []) as ProjectWithCustomer[]
 })
 
 const { data: myIssues } = await useAsyncData('overview-my-issues', async () => {
@@ -105,10 +107,19 @@ const { data: myIssues } = await useAsyncData('overview-my-issues', async () => 
               :to="`/projects/${project.slug}`"
               class="block"
             >
-              <UCard class="hover:border-primary transition" :ui="{ body: 'space-y-1' }">
+              <UCard class="hover:border-primary transition" :ui="{ body: 'space-y-2' }">
                 <div class="flex items-center justify-between">
                   <span class="font-medium">{{ project.name }}</span>
                   <UBadge variant="outline" size="sm" :label="project.key" />
+                </div>
+                <div v-if="project.customer" class="flex items-center gap-1.5 text-xs text-muted">
+                  <UAvatar
+                    :src="project.customer.logo_url ?? undefined"
+                    :alt="project.customer.name"
+                    icon="i-lucide-building-2"
+                    size="3xs"
+                  />
+                  <span class="truncate">{{ project.customer.name }}</span>
                 </div>
                 <p v-if="project.description" class="text-sm text-muted line-clamp-2">
                   {{ project.description }}
