@@ -3,8 +3,6 @@ import { z } from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { IssuePriority, IssueStatus, IssueType, Profile, Project } from '~/types/database'
 
-definePageMeta({ middleware: 'staff' })
-
 const route = useRoute()
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()

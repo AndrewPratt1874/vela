@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { format, formatDistanceStrict } from 'date-fns'
 import type { Customer, PersonRef, Project, Ticket } from '~/types/database'
 
 definePageMeta({ middleware: 'staff' })
@@ -42,6 +43,8 @@ const assigneeItems = computed(() => [
   ...(staff.value ?? []).map((s) => ({ label: s.full_name ?? s.email ?? 'Unknown', value: s.id })),
 ])
 
+const timeline = ref<{ refresh: () => Promise<void> } | null>(null)
+
 async function update(payload: Partial<Ticket>, notify?: 'status' | 'assigned') {
   const { error } = await supabase.from('tickets').update(payload).eq('id', ticket.value!.id)
   if (error) {
@@ -49,8 +52,27 @@ async function update(payload: Partial<Ticket>, notify?: 'status' | 'assigned') 
     return
   }
   await refresh()
+  await timeline.value?.refresh()
   if (notify) await notifyTicketEvent(ticket.value!.id, notify)
 }
+
+async function remove() {
+  if (!confirm(`Delete ticket #${ticket.value!.number}? This also removes its comments and attachments. This can't be undone.`)) return
+  const { error } = await supabase.from('tickets').delete().eq('id', ticket.value!.id)
+  if (error) {
+    toast.add({ title: 'Delete failed', description: error.message, color: 'error' })
+    return
+  }
+  toast.add({ title: 'Ticket deleted', color: 'success' })
+  await navigateTo('/tickets')
+}
+
+const openedAt = computed(() => format(new Date(ticket.value!.created_at), 'd MMM yyyy, HH:mm'))
+const openDuration = computed(() => {
+  const end = ticket.value!.resolved_at ? new Date(ticket.value!.resolved_at) : new Date()
+  return formatDistanceStrict(new Date(ticket.value!.created_at), end)
+})
+const isResolved = computed(() => !!ticket.value!.resolved_at)
 
 // --- Promote to issue ---------------------------------------------------
 const { data: projects } = await useAsyncData(`ticket-cust-projects-${id.value}`, async () => {
@@ -113,6 +135,11 @@ async function promote() {
         <template #right>
           <UButton icon="i-lucide-git-branch-plus" label="Promote to issue" variant="subtle" @click="promoteOpen = true" />
           <UButton variant="ghost" to="/tickets" icon="i-lucide-arrow-left" label="All tickets" />
+          <UDropdownMenu
+            :items="[[{ label: 'Delete ticket', icon: 'i-lucide-trash-2', color: 'error', onSelect: remove }]]"
+          >
+            <UButton variant="ghost" color="neutral" icon="i-lucide-more-horizontal" square />
+          </UDropdownMenu>
         </template>
       </UDashboardNavbar>
     </template>
@@ -127,10 +154,21 @@ async function promote() {
             :body="ticket!.body"
             :reporter="ticket!.creator"
             :created-at="ticket!.created_at"
+            @posted="timeline?.refresh()"
           />
         </div>
 
-        <aside class="space-y-4 h-fit rounded-lg border border-default bg-elevated/50 p-4">
+        <aside class="space-y-4 lg:sticky lg:top-0 lg:self-start lg:h-[calc(100dvh-8rem)] lg:overflow-y-auto rounded-lg border border-default bg-elevated/50 p-4">
+          <div class="rounded-md border border-default bg-default p-3 text-sm space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-muted">Opened</span>
+              <span>{{ openedAt }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-muted">{{ isResolved ? 'Resolved in' : 'Open for' }}</span>
+              <span :class="isResolved ? 'text-success font-medium' : 'font-medium'">{{ openDuration }}</span>
+            </div>
+          </div>
           <div>
             <p class="text-xs uppercase tracking-wide text-muted mb-1">Customer</p>
             <NuxtLink v-if="ticket!.customer" :to="`/customers/${ticket!.customer.slug}`" class="text-sm hover:underline">
@@ -191,6 +229,9 @@ async function promote() {
               </NuxtLink>
             </div>
           </div>
+
+          <USeparator />
+          <TicketTimeline ref="timeline" :ticket-id="ticket!.id" />
         </aside>
       </div>
 

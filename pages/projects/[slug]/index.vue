@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import type { Issue, IssuePriority, IssueStatus, IssueType, IssueWithPeople, Label, PersonRef, Project } from '~/types/database'
 
-definePageMeta({ middleware: 'staff' })
-
 const route = useRoute()
 const supabase = useSupabaseClient()
 const toast = useToast()
@@ -67,6 +65,45 @@ const filtered = computed(() => {
   })
 })
 
+// ---- Click-to-sort (preference persisted in a cookie, SSR-safe) ----------
+type SortKey = 'number' | 'type' | 'title' | 'status' | 'priority' | 'assignee' | 'due'
+const sortPref = useCookie<{ key: SortKey, dir: 'asc' | 'desc' }>('vela-issues-sort', {
+  default: () => ({ key: 'number', dir: 'desc' }),
+  sameSite: 'lax',
+})
+function toggleSort(key: SortKey) {
+  const { key: curKey, dir } = sortPref.value
+  sortPref.value = curKey === key
+    ? { key, dir: dir === 'asc' ? 'desc' : 'asc' }
+    // Number newest-first; everything else (incl. due = soonest) ascending first.
+    : { key, dir: key === 'number' ? 'desc' : 'asc' }
+}
+const sortIcon = (key: SortKey) =>
+  sortPref.value.key !== key ? 'i-lucide-chevrons-up-down' : sortPref.value.dir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'
+
+const typeRank = Object.fromEntries(ISSUE_TYPES.map((t, i) => [t.value, i]))
+const statusRank = Object.fromEntries(ISSUE_STATUSES.map((s, i) => [s.value, i]))
+const priorityRank = Object.fromEntries(ISSUE_PRIORITIES.map((p, i) => [p.value, i]))
+
+const sorted = computed(() => {
+  const dir = sortPref.value.dir === 'asc' ? 1 : -1
+  const val = (i: IssueWithPeople): string | number => {
+    switch (sortPref.value.key) {
+      case 'number': return i.number
+      case 'type': return typeRank[i.type]
+      case 'title': return i.title.toLowerCase()
+      case 'status': return statusRank[i.status]
+      case 'priority': return priorityRank[i.priority]
+      case 'assignee': return (i.assignee?.full_name ?? i.assignee?.email ?? '').toLowerCase()
+      case 'due': return i.due_date ?? '￿' // undated sort last when ascending
+    }
+  }
+  return [...filtered.value].sort((a, b) => {
+    const av = val(a), bv = val(b)
+    return av < bv ? -dir : av > bv ? dir : 0
+  })
+})
+
 const statusItems = ISSUE_STATUSES.map((s) => ({ label: s.label, value: s.value, icon: s.icon }))
 const priorityItems = ISSUE_PRIORITIES.map((p) => ({ label: p.label, value: p.value, icon: p.icon }))
 const typeItems = ISSUE_TYPES.map((t) => ({ label: t.label, value: t.value, icon: t.icon }))
@@ -107,6 +144,59 @@ async function commitTitle(issue: IssueWithPeople) {
   editingTitleId.value = null
   if (next && next !== issue.title) await updateIssue(issue, { title: next })
 }
+
+// ---- Inline add (quick-add row) ----------------------------------------
+const adding = ref(false)
+const draft = reactive({
+  title: '',
+  type: 'task' as IssueType,
+  status: 'todo' as IssueStatus,
+  priority: 'medium' as IssuePriority,
+  assignee_id: null as string | null,
+  due_date: null as string | null,
+})
+async function addIssue() {
+  const title = draft.title.trim()
+  if (!title || adding.value || !user.value || !project.value) return
+  adding.value = true
+  const { error } = await supabase.from('issues').insert({
+    project_id: project.value.id,
+    title,
+    type: draft.type,
+    status: draft.status,
+    priority: draft.priority,
+    assignee_id: draft.assignee_id,
+    due_date: draft.due_date || null,
+    reporter_id: user.value.id,
+  })
+  adding.value = false
+  if (error) {
+    toast.add({ title: 'Could not add issue', description: error.message, color: 'error' })
+    return
+  }
+  // Keep type/status/priority/assignee for fast repeat entry; clear the rest.
+  draft.title = ''
+  draft.due_date = null
+  await refresh()
+  nextTick(() => document.getElementById('quick-add-title')?.focus())
+}
+const draftAssignee = computed(() => (members.value ?? []).find((m) => m.id === draft.assignee_id) ?? null)
+
+// Delete an issue (RLS: anyone with project access). Cascades to comments etc.
+async function deleteIssue(issue: IssueWithPeople) {
+  if (!confirm(`Delete ${project.value!.key}-${issue.number}? This can't be undone.`)) return
+  const { error } = await supabase.from('issues').delete().eq('id', issue.id)
+  if (error) {
+    toast.add({ title: 'Delete failed', description: error.message, color: 'error' })
+    return
+  }
+  issues.value = (issues.value ?? []).filter((i) => i.id !== issue.id)
+  toast.add({ title: `${project.value!.key}-${issue.number} deleted`, color: 'success' })
+}
+const rowMenu = (issue: IssueWithPeople) => [[
+  { label: 'Open', icon: 'i-lucide-maximize-2', to: `/projects/${slug.value}/issues/${issue.number}` },
+  { label: 'Delete issue', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => deleteIssue(issue) },
+]]
 </script>
 
 <template>
@@ -138,29 +228,36 @@ async function commitTitle(issue: IssueWithPeople) {
     </template>
 
     <template #body>
-      <div v-if="!issues?.length" class="p-12 text-center">
-        <UIcon name="i-lucide-inbox" class="size-10 mx-auto mb-3 text-dimmed" />
-        <h2 class="font-semibold mb-1">No issues yet</h2>
-        <p class="text-sm text-muted mb-4">Get the ball rolling.</p>
-        <UButton :to="`/projects/${slug}/issues/new`" label="Create issue" color="primary" />
-      </div>
-
-      <div v-else class="overflow-x-auto">
+      <div class="overflow-x-auto">
         <table class="w-full text-sm border-separate border-spacing-0 min-w-[920px]">
           <thead class="sticky top-0 z-10 bg-default">
             <tr class="text-xs text-muted text-left">
-              <th class="font-medium px-3 py-2 border-b border-default w-20">ID</th>
-              <th class="font-medium px-2 py-2 border-b border-default w-36">Type</th>
-              <th class="font-medium px-2 py-2 border-b border-default">Title</th>
-              <th class="font-medium px-2 py-2 border-b border-default w-40">Status</th>
-              <th class="font-medium px-2 py-2 border-b border-default w-36">Priority</th>
-              <th class="font-medium px-2 py-2 border-b border-default w-44">Assignee</th>
-              <th class="font-medium px-2 py-2 border-b border-default w-36">Due</th>
+              <th class="font-medium px-3 py-2 border-b border-default w-20">
+                <button type="button" class="flex items-center gap-1 hover:text-default" @click="toggleSort('number')">ID<UIcon :name="sortIcon('number')" class="size-3" /></button>
+              </th>
+              <th class="font-medium px-2 py-2 border-b border-default w-36">
+                <button type="button" class="flex items-center gap-1 hover:text-default" @click="toggleSort('type')">Type<UIcon :name="sortIcon('type')" class="size-3" /></button>
+              </th>
+              <th class="font-medium px-2 py-2 border-b border-default">
+                <button type="button" class="flex items-center gap-1 hover:text-default" @click="toggleSort('title')">Title<UIcon :name="sortIcon('title')" class="size-3" /></button>
+              </th>
+              <th class="font-medium px-2 py-2 border-b border-default w-40">
+                <button type="button" class="flex items-center gap-1 hover:text-default" @click="toggleSort('status')">Status<UIcon :name="sortIcon('status')" class="size-3" /></button>
+              </th>
+              <th class="font-medium px-2 py-2 border-b border-default w-36">
+                <button type="button" class="flex items-center gap-1 hover:text-default" @click="toggleSort('priority')">Priority<UIcon :name="sortIcon('priority')" class="size-3" /></button>
+              </th>
+              <th class="font-medium px-2 py-2 border-b border-default w-44">
+                <button type="button" class="flex items-center gap-1 hover:text-default" @click="toggleSort('assignee')">Assignee<UIcon :name="sortIcon('assignee')" class="size-3" /></button>
+              </th>
+              <th class="font-medium px-2 py-2 border-b border-default w-36">
+                <button type="button" class="flex items-center gap-1 hover:text-default" @click="toggleSort('due')">Due<UIcon :name="sortIcon('due')" class="size-3" /></button>
+              </th>
               <th class="font-medium px-2 py-2 border-b border-default w-10" />
             </tr>
           </thead>
           <tbody>
-            <tr v-for="issue in filtered" :key="issue.id" class="group hover:bg-elevated/40">
+            <tr v-for="issue in sorted" :key="issue.id" class="group hover:bg-elevated/40">
               <!-- ID -->
               <td class="px-3 py-1.5 border-b border-default align-middle">
                 <span class="font-mono text-xs text-muted">{{ project!.key }}-{{ issue.number }}</span>
@@ -282,21 +379,134 @@ async function commitTitle(issue: IssueWithPeople) {
                 />
               </td>
 
-              <!-- Open detail -->
+              <!-- Row actions -->
               <td class="px-2 py-1.5 border-b border-default text-right">
-                <UButton
-                  :to="`/projects/${slug}/issues/${issue.number}`"
-                  variant="ghost"
-                  color="neutral"
-                  icon="i-lucide-maximize-2"
-                  size="xs"
-                  square
-                  class="opacity-0 group-hover:opacity-100"
-                />
+                <UDropdownMenu :items="rowMenu(issue)" :content="{ align: 'end' }">
+                  <UButton
+                    variant="ghost"
+                    color="neutral"
+                    icon="i-lucide-ellipsis"
+                    size="xs"
+                    square
+                    class="opacity-0 group-hover:opacity-100"
+                  />
+                </UDropdownMenu>
               </td>
             </tr>
-            <tr v-if="!filtered.length">
-              <td colspan="8" class="p-8 text-center text-sm text-muted">No issues match these filters.</td>
+            <tr v-if="!sorted.length">
+              <td colspan="8" class="p-8 text-center text-sm text-muted">
+                {{ issues?.length ? 'No issues match these filters.' : 'No issues yet — add your first below.' }}
+              </td>
+            </tr>
+
+            <!-- Quick add row -->
+            <tr class="bg-elevated/30">
+              <td class="px-3 py-1.5 border-b border-default text-center">
+                <UIcon name="i-lucide-plus" class="size-4 text-muted" />
+              </td>
+              <td class="px-2 py-1.5 border-b border-default">
+                <USelectMenu
+                  :model-value="draft.type"
+                  :items="typeItems"
+                  value-key="value"
+                  variant="none"
+                  size="sm"
+                  :ui="{ base: 'w-full px-1.5' }"
+                  @update:model-value="(v: any) => draft.type = v"
+                >
+                  <template #default>
+                    <span class="flex items-center gap-1.5">
+                      <UIcon :name="typeMap[draft.type].icon" :class="`text-${typeMap[draft.type].color}`" class="size-4" />
+                      {{ typeMap[draft.type].label }}
+                    </span>
+                  </template>
+                </USelectMenu>
+              </td>
+              <td class="px-2 py-1.5 border-b border-default">
+                <UInput
+                  id="quick-add-title"
+                  v-model="draft.title"
+                  size="sm"
+                  class="w-full"
+                  placeholder="Add an issue and press Enter…"
+                  :disabled="adding"
+                  @keydown.enter="addIssue"
+                />
+              </td>
+              <td class="px-2 py-1.5 border-b border-default">
+                <USelectMenu
+                  :model-value="draft.status"
+                  :items="statusItems"
+                  value-key="value"
+                  variant="none"
+                  size="sm"
+                  :ui="{ base: 'w-full px-1.5' }"
+                  @update:model-value="(v: any) => draft.status = v"
+                >
+                  <template #default>
+                    <span class="flex items-center gap-1.5">
+                      <UIcon :name="statusMap[draft.status].icon" :class="`text-${statusMap[draft.status].color}`" class="size-4" />
+                      {{ statusMap[draft.status].label }}
+                    </span>
+                  </template>
+                </USelectMenu>
+              </td>
+              <td class="px-2 py-1.5 border-b border-default">
+                <USelectMenu
+                  :model-value="draft.priority"
+                  :items="priorityItems"
+                  value-key="value"
+                  variant="none"
+                  size="sm"
+                  :ui="{ base: 'w-full px-1.5' }"
+                  @update:model-value="(v: any) => draft.priority = v"
+                >
+                  <template #default>
+                    <UBadge variant="subtle" size="sm" :color="priorityMap[draft.priority].color" :label="priorityMap[draft.priority].label" />
+                  </template>
+                </USelectMenu>
+              </td>
+              <td class="px-2 py-1.5 border-b border-default">
+                <USelectMenu
+                  :model-value="draft.assignee_id"
+                  :items="assigneeItems"
+                  value-key="value"
+                  variant="none"
+                  size="sm"
+                  :ui="{ base: 'w-full px-1.5' }"
+                  @update:model-value="(v: any) => draft.assignee_id = v"
+                >
+                  <template #default>
+                    <span class="flex items-center gap-1.5 truncate">
+                      <UAvatar v-if="draftAssignee" :alt="draftAssignee.full_name ?? draftAssignee.email ?? ''" :src="draftAssignee.avatar_url ?? undefined" size="3xs" />
+                      <UIcon v-else name="i-lucide-user" class="size-4 text-dimmed" />
+                      <span class="truncate text-xs">{{ draftAssignee?.full_name ?? draftAssignee?.email ?? 'Unassigned' }}</span>
+                    </span>
+                  </template>
+                </USelectMenu>
+              </td>
+              <td class="px-2 py-1.5 border-b border-default">
+                <UInput
+                  :model-value="draft.due_date ?? ''"
+                  type="date"
+                  size="sm"
+                  variant="none"
+                  :ui="{ base: 'w-full px-1' }"
+                  @change="(e: any) => draft.due_date = e.target.value || null"
+                />
+              </td>
+              <td class="px-2 py-1.5 border-b border-default text-right">
+                <UButton
+                  icon="i-lucide-corner-down-left"
+                  size="xs"
+                  square
+                  color="primary"
+                  variant="soft"
+                  :loading="adding"
+                  :disabled="!draft.title.trim()"
+                  @click="addIssue"
+                />
+              </td>
             </tr>
           </tbody>
         </table>

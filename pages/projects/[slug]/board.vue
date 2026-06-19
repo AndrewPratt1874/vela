@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import type { IssueStatus, IssueWithPeople, Label, Project } from '~/types/database'
 
-definePageMeta({ middleware: 'staff' })
-
 const route = useRoute()
 const supabase = useSupabaseClient()
 const toast = useToast()

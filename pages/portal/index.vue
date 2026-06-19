@@ -93,7 +93,7 @@ const { data: tickets } = await useAsyncData('portal-home-tickets', async () => 
             <p class="text-sm text-muted">No projects yet.</p>
           </div>
           <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <NuxtLink v-for="project in projects" :key="project.id" :to="`/projects/${project.slug}/files`" class="block">
+            <NuxtLink v-for="project in projects" :key="project.id" :to="`/projects/${project.slug}`" class="block">
               <UCard class="hover:border-primary transition h-full">
                 <div class="flex items-start justify-between mb-1">
                   <span class="font-medium">{{ project.name }}</span>

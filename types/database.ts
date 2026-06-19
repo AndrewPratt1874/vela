@@ -88,8 +88,21 @@ export type Ticket = {
   category: TicketCategory
   created_by: string
   assigned_to: string | null
+  resolved_at: string | null
   created_at: string
   updated_at: string
+}
+
+export type TicketEventType =
+  | 'created' | 'status_changed' | 'assigned' | 'priority_changed' | 'category_changed' | 'commented'
+
+export type TicketEvent = {
+  id: string
+  ticket_id: string
+  actor_id: string | null
+  type: TicketEventType
+  data: Record<string, any>
+  created_at: string
 }
 
 export type TicketComment = {
@@ -227,6 +240,12 @@ export interface Database {
         Row: Notification
         Insert: Omit<Notification, 'id' | 'created_at' | 'read'> & { id?: string, read?: boolean }
         Update: Partial<Notification>
+        Relationships: []
+      }
+      ticket_events: {
+        Row: TicketEvent
+        Insert: Omit<TicketEvent, 'id' | 'created_at'> & { id?: string }
+        Update: Partial<TicketEvent>
         Relationships: []
       }
     }

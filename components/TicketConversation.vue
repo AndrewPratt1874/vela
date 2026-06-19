@@ -9,6 +9,7 @@ const props = defineProps<{
   reporter: PersonRef | null
   createdAt: string
 }>()
+const emit = defineEmits<{ posted: [] }>()
 
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
@@ -75,6 +76,7 @@ async function submit() {
       await notifyTicketEvent(props.ticketId, 'comment', excerpt)
       reply.value = ''
       await refreshComments()
+      emit('posted')
     }
   } catch (e: any) {
     toast.add({ title: 'Could not send', description: e?.message, color: 'error' })
