@@ -33,6 +33,8 @@ interface EmailContent {
   ctaUrl?: string
   /** Optional muted quote/excerpt block (e.g. a comment body) */
   quote?: string
+  /** Override the footer line (defaults to ticket-participant wording). */
+  footnote?: string
 }
 
 const BRAND = '#4f46e5' // indigo-600
@@ -104,7 +106,7 @@ function renderLayout(content: EmailContent, appName: string) {
           <tr>
             <td style="padding:18px 28px;border-top:1px solid ${BORDER};">
               <p style="margin:0;font-size:12px;line-height:1.5;color:${MUTED};">
-                You're receiving this because you're a participant on this ticket in ${escapeHtml(appName)}.
+                ${escapeHtml(content.footnote ?? `You're receiving this because you're a participant on this ticket in ${appName}.`)}
               </p>
             </td>
           </tr>
@@ -115,7 +117,16 @@ function renderLayout(content: EmailContent, appName: string) {
 </html>`
 }
 
-export async function sendNotificationEmail(to: string, subject: string, content: EmailContent) {
+interface SendOptions {
+  /** Reply-To header — used to thread email replies back onto a ticket. */
+  replyTo?: string
+  /** Stable Message-Id for this mail, so replies' In-Reply-To can match it. */
+  messageId?: string
+}
+
+export async function sendNotificationEmail(
+  to: string, subject: string, content: EmailContent, options: SendOptions = {},
+) {
   const transport = getTransport()
   if (!transport) return { sent: false, reason: 'mail-not-configured' }
 
@@ -128,6 +139,8 @@ export async function sendNotificationEmail(to: string, subject: string, content
     from,
     to,
     subject,
+    replyTo: options.replyTo,
+    messageId: options.messageId,
     html: renderLayout(content, appName),
     attachments: [
       // Server fetches its own /logo.png and inlines it (works in dev + prod).
@@ -135,4 +148,13 @@ export async function sendNotificationEmail(to: string, subject: string, content
     ],
   })
   return { sent: true }
+}
+
+/**
+ * Per-ticket Reply-To address (ticket+<id>@<inbound-domain>). Returns undefined
+ * when no inbound domain is configured, so outbound mail simply omits it.
+ */
+export function ticketReplyTo(ticketId: string): string | undefined {
+  const domain = useRuntimeConfig().mailgun.inboundDomain
+  return domain ? `ticket+${ticketId}@${domain}` : undefined
 }

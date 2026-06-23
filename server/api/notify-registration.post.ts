@@ -24,6 +24,22 @@ export default defineEventHandler(async (event) => {
     return { ok: true, sent: 0 }
   }
 
+  // Acknowledge the new user: their account is awaiting approval.
+  if (profile.email) {
+    try {
+      await sendNotificationEmail(profile.email, 'We’ve received your registration', {
+        heading: 'Thanks for signing up',
+        lines: [
+          `Hi${profile.full_name ? ` ${profile.full_name}` : ''}, thanks for registering for Vela.`,
+          'Your account is pending approval — someone at Codable will review it shortly. We’ll email you as soon as it’s approved, and then you can sign in.',
+        ],
+        footnote: 'You’re receiving this because you registered for a Vela account.',
+      })
+    } catch (err) {
+      console.error('[notify-registration] welcome email failed for', profile.email, err)
+    }
+  }
+
   const { data: staff } = await admin
     .from('profiles')
     .select('email')

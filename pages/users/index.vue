@@ -69,6 +69,10 @@ async function setStatus(target: Row, action: 'approve' | 'reject') {
     toast.add({ title: `Could not ${action} user`, description: error.message, color: 'error' })
     return
   }
+  // Best-effort: let the user know they've been approved.
+  if (action === 'approve') {
+    $fetch('/api/notify-approval', { method: 'POST', body: { userId: target.id } }).catch(() => {})
+  }
   toast.add({
     title: action === 'approve' ? 'User approved' : 'User rejected',
     description: `${target.full_name ?? target.email}`,
