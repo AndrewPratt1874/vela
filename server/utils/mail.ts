@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
+import { LOGO_PNG_BASE64 } from './logo'
 
 let cachedTransport: Transporter | null = null
 
@@ -132,7 +133,6 @@ export async function sendNotificationEmail(
 
   const config = useRuntimeConfig()
   const appName = config.public.appName
-  const appUrl = config.public.appUrl
   const from = `"${config.mail.fromName}" <${config.mail.from}>`
 
   await transport.sendMail({
@@ -143,8 +143,9 @@ export async function sendNotificationEmail(
     messageId: options.messageId,
     html: renderLayout(content, appName),
     attachments: [
-      // Server fetches its own /logo.png and inlines it (works in dev + prod).
-      { filename: 'logo.png', path: `${appUrl}/logo.png`, cid: 'logo' },
+      // Logo is inlined from a bundled base64 constant — no runtime HTTP fetch,
+      // which previously failed and silently dropped the whole email.
+      { filename: 'logo.png', content: LOGO_PNG_BASE64, encoding: 'base64', cid: 'logo' },
     ],
   })
   return { sent: true }
