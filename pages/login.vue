@@ -133,7 +133,7 @@ async function resendConfirmation() {
       <UIcon name="i-lucide-mail-check" class="text-primary size-10 mx-auto" />
       <p class="font-medium">Confirm your email</p>
       <p class="text-sm text-muted text-balance">
-        We sent a 6-digit code to <strong>{{ email }}</strong>. Enter it below to finish creating your account.
+        We sent a confirmation code to <strong>{{ email }}</strong>. Enter it below to finish creating your account.
       </p>
 
       <form class="space-y-3 pt-1 text-left" @submit.prevent="verifyCode">
@@ -142,8 +142,7 @@ async function resendConfirmation() {
             v-model="code"
             inputmode="numeric"
             autocomplete="one-time-code"
-            placeholder="123456"
-            maxlength="6"
+            placeholder="12345678"
             autofocus
             required
             class="w-full"

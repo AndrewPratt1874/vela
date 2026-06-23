@@ -120,8 +120,8 @@ onMounted(() => {
       <p class="text-sm text-muted text-balance">
         {{
           expired
-            ? 'Enter the 6-digit code from your confirmation email, or resend a new one.'
-            : (authError.description || 'Enter the 6-digit code from your confirmation email, or resend a new one.')
+            ? 'Enter the code from your confirmation email, or resend a new one.'
+            : (authError.description || 'Enter the code from your confirmation email, or resend a new one.')
         }}
       </p>
 
@@ -141,8 +141,7 @@ onMounted(() => {
             v-model="code"
             inputmode="numeric"
             autocomplete="one-time-code"
-            placeholder="123456"
-            maxlength="6"
+            placeholder="12345678"
             required
             class="w-full"
           />
