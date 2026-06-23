@@ -231,27 +231,27 @@ function fmt(d: string) {
             </table>
           </div>
         </section>
+
+        <UModal
+          :open="!!toDelete"
+          title="Delete user"
+          :description="`Permanently delete ${toDelete?.full_name ?? toDelete?.email ?? 'this user'}? This removes their account and cannot be undone.`"
+          @update:open="(v) => { if (!v) toDelete = null }"
+        >
+          <template #footer>
+            <div class="flex justify-end gap-2 w-full">
+              <UButton color="neutral" variant="ghost" label="Cancel" @click="toDelete = null" />
+              <UButton
+                color="error"
+                icon="i-lucide-trash-2"
+                label="Delete user"
+                :loading="deleting"
+                @click="confirmDelete"
+              />
+            </div>
+          </template>
+        </UModal>
       </div>
     </template>
-
-    <UModal
-      :open="!!toDelete"
-      title="Delete user"
-      :description="`Permanently delete ${toDelete?.full_name ?? toDelete?.email ?? 'this user'}? This removes their account and cannot be undone.`"
-      @update:open="(v) => { if (!v) toDelete = null }"
-    >
-      <template #footer>
-        <div class="flex justify-end gap-2 w-full">
-          <UButton color="neutral" variant="ghost" label="Cancel" @click="toDelete = null" />
-          <UButton
-            color="error"
-            icon="i-lucide-trash-2"
-            label="Delete user"
-            :loading="deleting"
-            @click="confirmDelete"
-          />
-        </div>
-      </template>
-    </UModal>
   </UDashboardPanel>
 </template>
