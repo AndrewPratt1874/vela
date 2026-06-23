@@ -33,6 +33,32 @@ function roleLabel(u: Row) {
 }
 
 const busy = ref<string | null>(null)
+const toDelete = ref<Row | null>(null)
+const deleting = ref(false)
+
+async function confirmDelete() {
+  const target = toDelete.value
+  if (!target) return
+  deleting.value = true
+  try {
+    await $fetch(`/api/users/${target.id}`, { method: 'DELETE' })
+    toast.add({
+      title: 'User deleted',
+      description: `${target.full_name ?? target.email}`,
+      color: 'success',
+    })
+    toDelete.value = null
+    await refresh()
+  } catch (err: any) {
+    toast.add({
+      title: 'Could not delete user',
+      description: err?.statusMessage ?? err?.data?.statusMessage ?? err?.message ?? 'Something went wrong',
+      color: 'error',
+    })
+  } finally {
+    deleting.value = false
+  }
+}
 
 async function setStatus(target: Row, action: 'approve' | 'reject') {
   busy.value = target.id
@@ -112,6 +138,14 @@ function fmt(d: string) {
                   :loading="busy === u.id"
                   @click="setStatus(u, 'approve')"
                 />
+                <UButton
+                  size="sm"
+                  color="error"
+                  variant="ghost"
+                  icon="i-lucide-trash-2"
+                  :aria-label="`Delete ${u.full_name ?? u.email}`"
+                  @click="toDelete = u"
+                />
               </div>
             </div>
           </div>
@@ -163,7 +197,7 @@ function fmt(d: string) {
                   <td class="p-3 hidden sm:table-cell text-muted">{{ fmt(u.created_at) }}</td>
                   <td class="p-3 text-right">
                     <span v-if="u.id === user?.id" class="text-xs text-dimmed">You</span>
-                    <template v-else>
+                    <div v-else class="flex items-center justify-end gap-1">
                       <UButton
                         v-if="u.status === 'approved'"
                         size="xs"
@@ -182,7 +216,15 @@ function fmt(d: string) {
                         :loading="busy === u.id"
                         @click="setStatus(u, 'approve')"
                       />
-                    </template>
+                      <UButton
+                        size="xs"
+                        color="error"
+                        variant="ghost"
+                        icon="i-lucide-trash-2"
+                        :aria-label="`Delete ${u.full_name ?? u.email}`"
+                        @click="toDelete = u"
+                      />
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -191,5 +233,25 @@ function fmt(d: string) {
         </section>
       </div>
     </template>
+
+    <UModal
+      :open="!!toDelete"
+      title="Delete user"
+      :description="`Permanently delete ${toDelete?.full_name ?? toDelete?.email ?? 'this user'}? This removes their account and cannot be undone.`"
+      @update:open="(v) => { if (!v) toDelete = null }"
+    >
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton color="neutral" variant="ghost" label="Cancel" @click="toDelete = null" />
+          <UButton
+            color="error"
+            icon="i-lucide-trash-2"
+            label="Delete user"
+            :loading="deleting"
+            @click="confirmDelete"
+          />
+        </div>
+      </template>
+    </UModal>
   </UDashboardPanel>
 </template>
