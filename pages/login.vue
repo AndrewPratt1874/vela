@@ -11,11 +11,7 @@ const fullName = ref('')
 const email = ref('')
 const password = ref('')
 const loading = ref(false)
-const resending = ref(false)
-const verifying = ref(false)
-const code = ref('')
 const errorMessage = ref<string | null>(null)
-const needsConfirm = ref(false)
 
 const isSignup = computed(() => mode.value === 'signup')
 
@@ -29,23 +25,20 @@ async function submit() {
   loading.value = true
   try {
     if (isSignup.value) {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: email.value,
         password: password.value,
         options: {
           data: { full_name: fullName.value || undefined },
-          emailRedirectTo: `${window.location.origin}/confirm`,
         },
       })
       if (error) throw error
       // Best-effort: alert staff that someone is awaiting approval. The profile
       // is created synchronously by the signup trigger, so it exists by now.
       $fetch('/api/notify-registration', { method: 'POST', body: { email: email.value } }).catch(() => {})
-      // If email confirmation is enabled, there is no session yet.
-      if (!data.session) {
-        needsConfirm.value = true
-        return
-      }
+      // Email confirmation is disabled, so signup returns a session immediately.
+      // The global approval guard holds the new user on /pending until staff
+      // approve them.
       await navigateTo('/')
     } else {
       const { error } = await supabase.auth.signInWithPassword({
@@ -67,54 +60,6 @@ async function submit() {
   }
 }
 
-async function verifyCode() {
-  if (!code.value) return
-  verifying.value = true
-  errorMessage.value = null
-  try {
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.value,
-      token: code.value.trim(),
-      type: 'signup',
-    })
-    if (error) throw error
-    await navigateTo('/')
-  } catch (err: any) {
-    errorMessage.value = err?.message ?? 'That code is invalid or expired'
-    toast.add({
-      title: 'Could not confirm',
-      description: errorMessage.value!,
-      color: 'error',
-    })
-  } finally {
-    verifying.value = false
-  }
-}
-
-async function resendConfirmation() {
-  resending.value = true
-  try {
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email.value,
-      options: { emailRedirectTo: `${window.location.origin}/confirm` },
-    })
-    if (error) throw error
-    toast.add({
-      title: 'Confirmation email sent',
-      description: `We re-sent the link to ${email.value}.`,
-      color: 'success',
-    })
-  } catch (err: any) {
-    toast.add({
-      title: 'Could not resend',
-      description: err?.message ?? 'Something went wrong',
-      color: 'error',
-    })
-  } finally {
-    resending.value = false
-  }
-}
 </script>
 
 <template>
@@ -129,47 +74,7 @@ async function resendConfirmation() {
       </div>
     </template>
 
-    <div v-if="needsConfirm" class="space-y-3 text-center py-4">
-      <UIcon name="i-lucide-mail-check" class="text-primary size-10 mx-auto" />
-      <p class="font-medium">Confirm your email</p>
-      <p class="text-sm text-muted text-balance">
-        We sent a confirmation code to <strong>{{ email }}</strong>. Enter it below to finish creating your account.
-      </p>
-
-      <form class="space-y-3 pt-1 text-left" @submit.prevent="verifyCode">
-        <UFormField label="Confirmation code" name="code">
-          <UInput
-            v-model="code"
-            inputmode="numeric"
-            autocomplete="one-time-code"
-            placeholder="12345678"
-            autofocus
-            required
-            class="w-full"
-          />
-        </UFormField>
-
-        <p v-if="errorMessage" class="text-sm text-error">{{ errorMessage }}</p>
-
-        <UButton type="submit" :loading="verifying" block>Confirm email</UButton>
-      </form>
-
-      <div class="pt-1">
-        <UButton
-          variant="link"
-          color="neutral"
-          icon="i-lucide-rotate-cw"
-          :loading="resending"
-          label="Resend code"
-          @click="resendConfirmation"
-        />
-        <p class="text-xs text-dimmed mt-1">
-          Didn't get it? Check spam, then resend.
-        </p>
-      </div>
-    </div>
-
-    <form v-else class="space-y-4" @submit.prevent="submit">
+    <form class="space-y-4" @submit.prevent="submit">
       <UFormField v-if="isSignup" label="Full name" name="fullName">
         <UInput
           v-model="fullName"
@@ -209,7 +114,7 @@ async function resendConfirmation() {
       </UButton>
     </form>
 
-    <template v-if="!needsConfirm" #footer>
+    <template #footer>
       <div class="space-y-2 text-center">
         <p class="text-sm text-muted">
           {{ isSignup ? 'Already have an account?' : "Don't have an account?" }}
