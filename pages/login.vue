@@ -12,6 +12,8 @@ const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const resending = ref(false)
+const verifying = ref(false)
+const code = ref('')
 const errorMessage = ref<string | null>(null)
 const needsConfirm = ref(false)
 
@@ -65,6 +67,30 @@ async function submit() {
   }
 }
 
+async function verifyCode() {
+  if (!code.value) return
+  verifying.value = true
+  errorMessage.value = null
+  try {
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.value,
+      token: code.value.trim(),
+      type: 'signup',
+    })
+    if (error) throw error
+    await navigateTo('/')
+  } catch (err: any) {
+    errorMessage.value = err?.message ?? 'That code is invalid or expired'
+    toast.add({
+      title: 'Could not confirm',
+      description: errorMessage.value!,
+      color: 'error',
+    })
+  } finally {
+    verifying.value = false
+  }
+}
+
 async function resendConfirmation() {
   resending.value = true
   try {
@@ -103,21 +129,42 @@ async function resendConfirmation() {
       </div>
     </template>
 
-    <div v-if="needsConfirm" class="space-y-2 text-center py-4">
+    <div v-if="needsConfirm" class="space-y-3 text-center py-4">
       <UIcon name="i-lucide-mail-check" class="text-primary size-10 mx-auto" />
       <p class="font-medium">Confirm your email</p>
-      <p class="text-sm text-muted">
-        We sent a confirmation link to <strong>{{ email }}</strong>. Click it to finish creating your account.
+      <p class="text-sm text-muted text-balance">
+        We sent a 6-digit code to <strong>{{ email }}</strong>. Enter it below to finish creating your account.
       </p>
-      <div class="pt-2">
+
+      <form class="space-y-3 pt-1 text-left" @submit.prevent="verifyCode">
+        <UFormField label="Confirmation code" name="code">
+          <UInput
+            v-model="code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="123456"
+            maxlength="6"
+            autofocus
+            required
+            class="w-full"
+          />
+        </UFormField>
+
+        <p v-if="errorMessage" class="text-sm text-error">{{ errorMessage }}</p>
+
+        <UButton type="submit" :loading="verifying" block>Confirm email</UButton>
+      </form>
+
+      <div class="pt-1">
         <UButton
-          variant="subtle"
+          variant="link"
+          color="neutral"
           icon="i-lucide-rotate-cw"
           :loading="resending"
-          label="Resend confirmation email"
+          label="Resend code"
           @click="resendConfirmation"
         />
-        <p class="text-xs text-dimmed mt-2">
+        <p class="text-xs text-dimmed mt-1">
           Didn't get it? Check spam, then resend.
         </p>
       </div>

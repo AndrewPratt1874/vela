@@ -37,8 +37,32 @@ const expired = computed(
   () => authError.value?.code === 'otp_expired' || authError.value?.code === 'access_denied',
 )
 
-const email = ref('')
+const email = ref(typeof route.query.email === 'string' ? route.query.email : '')
+const code = ref('')
 const resending = ref(false)
+const verifying = ref(false)
+
+async function verifyCode() {
+  if (!email.value || !code.value) return
+  verifying.value = true
+  try {
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.value,
+      token: code.value.trim(),
+      type: 'signup',
+    })
+    if (error) throw error
+    await navigateTo('/')
+  } catch (err: any) {
+    toast.add({
+      title: 'Could not confirm',
+      description: err?.message ?? 'That code is invalid or expired',
+      color: 'error',
+    })
+  } finally {
+    verifying.value = false
+  }
+}
 
 async function resendConfirmation() {
   if (!email.value) return
@@ -96,12 +120,12 @@ onMounted(() => {
       <p class="text-sm text-muted text-balance">
         {{
           expired
-            ? 'Confirmation links are only valid for a short time. Enter your email to get a fresh one.'
-            : (authError.description || 'The link is invalid or has already been used.')
+            ? 'Enter the 6-digit code from your confirmation email, or resend a new one.'
+            : (authError.description || 'Enter the 6-digit code from your confirmation email, or resend a new one.')
         }}
       </p>
 
-      <form class="space-y-3 pt-2 text-left" @submit.prevent="resendConfirmation">
+      <form class="space-y-3 pt-2 text-left" @submit.prevent="verifyCode">
         <UFormField label="Email" name="email">
           <UInput
             v-model="email"
@@ -112,12 +136,31 @@ onMounted(() => {
             class="w-full"
           />
         </UFormField>
-        <UButton type="submit" :loading="resending" icon="i-lucide-rotate-cw" block>
-          Resend confirmation email
-        </UButton>
+        <UFormField label="Confirmation code" name="code">
+          <UInput
+            v-model="code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="123456"
+            maxlength="6"
+            required
+            class="w-full"
+          />
+        </UFormField>
+        <UButton type="submit" :loading="verifying" block>Confirm email</UButton>
       </form>
 
-      <UButton variant="link" color="neutral" to="/login" label="Back to sign in" />
+      <div class="flex items-center justify-center gap-3 pt-1">
+        <UButton
+          variant="link"
+          color="neutral"
+          icon="i-lucide-rotate-cw"
+          :loading="resending"
+          label="Resend code"
+          @click="resendConfirmation"
+        />
+        <UButton variant="link" color="neutral" to="/login" label="Back to sign in" />
+      </div>
     </div>
 
     <div v-else class="flex items-center gap-3 py-4">
