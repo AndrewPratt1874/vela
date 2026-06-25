@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { formatDistanceToNow } from 'date-fns'
-import type { IssuePriority, IssueStatus, IssueType, IssueWithPeople, Project } from '~/types/database'
+import type { Attachment, IssuePriority, IssueStatus, IssueType, IssueWithPeople, Project } from '~/types/database'
 
 const route = useRoute()
 const supabase = useSupabaseClient()
 const toast = useToast()
+const user = useSupabaseUser()
 const slug = computed(() => route.params.slug as string)
 const number = computed(() => Number(route.params.number))
 
@@ -37,10 +38,57 @@ if (!issue.value) {
   throw createError({ statusCode: 404, statusMessage: 'Issue not found' })
 }
 
-// Assignable to anyone on the project plus all approved staff.
-const { assignees: members } = await useProjectAssignees(project.value.id)
+// Assignable to anyone associated with the project: members, approved staff,
+// and the project customer's users.
+const { assignees: members } = await useProjectAssignees(project.value.id, project.value.customer_id)
 
 const { labels, createLabel, setIssueLabels } = useLabels(() => project.value?.id)
+
+// Files attached to this issue. We also stamp project_id (via projectId) so they
+// surface in the project's Files section — linking issues and files.
+const attachmentParent = computed(() =>
+  project.value?.customer_id
+    ? { customerId: project.value.customer_id, key: 'issue_id' as const, id: issue.value!.id, projectId: project.value.id }
+    : null,
+)
+const { attachments, upload: uploadAttachment, downloadUrl: attachmentUrl, remove: removeAttachment } = useAttachments(attachmentParent)
+
+const fileInput = ref<HTMLInputElement | null>(null)
+const uploadingFile = ref(false)
+async function onFilesPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files?.length) return
+  uploadingFile.value = true
+  try {
+    for (const f of Array.from(input.files)) await uploadAttachment(f)
+  } catch (err: any) {
+    toast.add({ title: 'Upload failed', description: err?.message, color: 'error' })
+  } finally {
+    uploadingFile.value = false
+    input.value = ''
+  }
+}
+async function openAttachment(a: Attachment) {
+  try {
+    window.open(await attachmentUrl(a), '_blank')
+  } catch (e: any) {
+    toast.add({ title: 'Could not open file', description: e?.message, color: 'error' })
+  }
+}
+function fileSize(bytes: number | null) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+function iconFor(mime: string | null) {
+  if (!mime) return 'i-lucide-file'
+  if (mime.startsWith('image/')) return 'i-lucide-file-image'
+  if (mime.includes('pdf')) return 'i-lucide-file-text'
+  if (mime.includes('zip') || mime.includes('compressed')) return 'i-lucide-file-archive'
+  if (mime.includes('sheet') || mime.includes('csv') || mime.includes('excel')) return 'i-lucide-file-spreadsheet'
+  return 'i-lucide-file'
+}
 
 const editing = ref(false)
 const draftTitle = ref(issue.value.title)
@@ -203,6 +251,60 @@ const updatedRelative = computed(() => formatDistanceToNow(new Date(issue.value!
                 label="Save resolution"
                 @click="saveResolution"
               />
+            </div>
+          </div>
+
+          <USeparator />
+
+          <!-- Attachments -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs uppercase tracking-wide text-muted">Attachments</p>
+              <UButton
+                size="xs"
+                variant="subtle"
+                icon="i-lucide-paperclip"
+                label="Attach"
+                :loading="uploadingFile"
+                :disabled="!attachmentParent"
+                @click="fileInput?.click()"
+              />
+              <input ref="fileInput" type="file" multiple class="hidden" @change="onFilesPicked">
+            </div>
+
+            <UAlert
+              v-if="!attachmentParent"
+              color="warning"
+              variant="subtle"
+              icon="i-lucide-triangle-alert"
+              title="No customer assigned"
+              description="Assign this project to a customer before attaching files."
+            />
+
+            <p v-else-if="!attachments?.length" class="text-sm text-muted">
+              No files attached. Anything you attach here also appears in the project's Files section.
+            </p>
+
+            <div v-else class="space-y-2">
+              <div
+                v-for="a in attachments"
+                :key="a.id"
+                class="group flex items-center gap-3 rounded-lg border border-default p-2.5 hover:border-primary transition"
+              >
+                <UIcon :name="iconFor(a.mime_type)" class="size-6 text-muted shrink-0" />
+                <div class="min-w-0 flex-1">
+                  <button class="text-sm font-medium truncate block w-full text-left hover:underline" @click="openAttachment(a)">
+                    {{ a.file_name }}
+                  </button>
+                  <p class="text-xs text-dimmed">{{ fileSize(a.size_bytes) }}</p>
+                </div>
+                <UButton variant="ghost" icon="i-lucide-download" size="xs" square @click="openAttachment(a)" />
+                <UButton
+                  v-if="a.uploaded_by === user?.id"
+                  variant="ghost" color="error" icon="i-lucide-trash-2" size="xs" square
+                  @click="removeAttachment(a)"
+                />
+              </div>
             </div>
           </div>
         </div>

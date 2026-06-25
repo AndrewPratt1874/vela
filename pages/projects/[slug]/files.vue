@@ -24,6 +24,19 @@ const parent = computed(() =>
 )
 const { attachments, upload, downloadUrl, remove } = useAttachments(parent)
 
+// Map issue id -> number so files attached to an issue can link back to it.
+const { data: issues } = await useAsyncData(`files-issues-${slug.value}`, async () => {
+  if (!project.value) return []
+  const { data } = await supabase
+    .from('issues')
+    .select('id, number')
+    .eq('project_id', project.value.id)
+  return (data ?? []) as { id: string; number: number }[]
+}, { watch: [slug] })
+const issueNumberById = computed(() =>
+  Object.fromEntries((issues.value ?? []).map((i) => [i.id, i.number])),
+)
+
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 
@@ -120,6 +133,14 @@ function iconFor(mime: string | null) {
                 {{ a.file_name }}
               </button>
               <p class="text-xs text-dimmed">{{ fileSize(a.size_bytes) }} · {{ timeAgo(a.created_at) }}</p>
+              <ULink
+                v-if="a.issue_id && issueNumberById[a.issue_id]"
+                :to="`/projects/${slug}/issues/${issueNumberById[a.issue_id]}`"
+                class="inline-flex items-center gap-1 mt-1 text-xs text-primary hover:underline"
+              >
+                <UIcon name="i-lucide-circle-dot" class="size-3" />
+                {{ project!.key }}-{{ issueNumberById[a.issue_id] }}
+              </ULink>
             </div>
             <UButton variant="ghost" icon="i-lucide-download" size="xs" square @click="open(a)" />
             <UButton

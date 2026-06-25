@@ -24,8 +24,9 @@ if (!project.value) {
   throw createError({ statusCode: 404, statusMessage: 'Project not found' })
 }
 
-// Assignable to anyone on the project plus all approved staff.
-const { assignees: members } = await useProjectAssignees(project.value.id)
+// Assignable to anyone associated with the project: members, approved staff,
+// and the project customer's users.
+const { assignees: members } = await useProjectAssignees(project.value.id, project.value.customer_id)
 
 const { labels, createLabel, setIssueLabels } = useLabels(() => project.value?.id)
 

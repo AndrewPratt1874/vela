@@ -45,8 +45,9 @@ const { data: issues, refresh } = await useAsyncData(
   { watch: [() => project.value?.id] },
 )
 
-// Assignable to anyone on the project plus all approved staff.
-const { assignees: members } = await useProjectAssignees(project.value.id)
+// Assignable to anyone associated with the project: members, approved staff,
+// and the project customer's users.
+const { assignees: members } = await useProjectAssignees(project.value.id, project.value.customer_id)
 
 const filtered = computed(() => {
   return (issues.value ?? []).filter((issue) => {

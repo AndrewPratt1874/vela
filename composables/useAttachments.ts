@@ -6,6 +6,12 @@ interface AttachmentParent {
   customerId: string
   key: ParentKey
   id: string
+  /**
+   * When uploading against a non-project parent (e.g. an issue), also stamp the
+   * owning project id on the row so the file surfaces in the project's Files
+   * section and is covered by the project_id RLS branch.
+   */
+  projectId?: string
 }
 
 /**
@@ -53,6 +59,10 @@ export function useAttachments(parent: MaybeRefOrGetter<AttachmentParent | null>
     })
     if (upErr) throw upErr
 
+    // Also tag the owning project (if given) so issue/ticket files appear in
+    // the project Files section. Skipped when the parent already is the project.
+    const projectStamp = p.projectId && p.key !== 'project_id' ? { project_id: p.projectId } : {}
+
     const { error: rowErr } = await supabase.from('attachments').insert({
       customer_id: p.customerId,
       storage_path: path,
@@ -61,6 +71,7 @@ export function useAttachments(parent: MaybeRefOrGetter<AttachmentParent | null>
       size_bytes: file.size,
       uploaded_by: user.value.id,
       [p.key]: p.id,
+      ...projectStamp,
     } as any)
     if (rowErr) {
       // Roll back the orphaned object if the row insert fails.
