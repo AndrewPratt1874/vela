@@ -62,6 +62,12 @@ const links = computed<NavigationMenuItem[][]>(() => {
         defaultOpen: route.path.startsWith('/tickets'),
       },
       {
+        label: 'Tasks',
+        icon: 'i-lucide-list-checks',
+        to: '/tasks',
+        defaultOpen: route.path.startsWith('/tasks'),
+      },
+      {
         label: 'Users',
         icon: 'i-lucide-users',
         to: '/users',
