@@ -32,6 +32,9 @@ const priorityItems = ISSUE_PRIORITIES.map((p) => ({ label: p.label, value: p.va
 
 const filtered = computed(() =>
   (tickets.value ?? []).filter((t) => {
+    // Closed tickets are hidden unless the user explicitly filters for "Closed",
+    // so the list stays focused on what still needs actioning.
+    if (t.status === 'closed' && !statusFilter.value.includes('closed')) return false
     if (statusFilter.value.length && !statusFilter.value.includes(t.status)) return false
     if (categoryFilter.value.length && !categoryFilter.value.includes(t.category)) return false
     if (priorityFilter.value.length && !priorityFilter.value.includes(t.priority)) return false
@@ -83,6 +86,20 @@ const sorted = computed(() => {
     const av = val(a), bv = val(b)
     return av < bv ? -dir : av > bv ? dir : 0
   })
+})
+
+// Paginate the *rendered* rows. Filtering/sorting/search still run over the
+// full set above, but only one page is mounted at a time — each row carries
+// several popover menus, so rendering hundreds at once janked navigation (INP).
+const PAGE_SIZE = 25
+const page = ref(1)
+const paged = computed(() => sorted.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
+// Any change that reshapes the list jumps back to the first page...
+watch([statusFilter, categoryFilter, priorityFilter, search, sortPref], () => { page.value = 1 })
+// ...and never leave the current page stranded past the end after filtering.
+watch(() => sorted.value.length, (n) => {
+  const last = Math.max(1, Math.ceil(n / PAGE_SIZE))
+  if (page.value > last) page.value = last
 })
 
 function timeAgo(iso: string) {
@@ -204,7 +221,7 @@ const rowMenu = (t: Row) => [[
         </div>
 
         <ul class="divide-y divide-default">
-          <li v-for="t in sorted" :key="t.id" class="group flex items-center gap-3 px-4 py-3 hover:bg-elevated/50">
+          <li v-for="t in paged" :key="t.id" class="group flex items-center gap-3 px-4 py-3 hover:bg-elevated/50">
             <UIcon :name="statusMap[t.status].icon" :class="`text-${statusMap[t.status].color}`" class="size-4 shrink-0" />
             <NuxtLink :to="`/tickets/${t.id}`" class="text-xs text-muted font-mono shrink-0 w-12 hover:underline">#{{ t.number }}</NuxtLink>
             <NuxtLink :to="`/tickets/${t.id}`" class="text-sm flex-1 min-w-0 truncate hover:underline">{{ t.subject }}</NuxtLink>
@@ -244,6 +261,13 @@ const rowMenu = (t: Row) => [[
           </li>
           <li v-if="!sorted.length" class="p-8 text-center text-sm text-muted">No tickets match.</li>
         </ul>
+
+        <div v-if="sorted.length > PAGE_SIZE" class="flex items-center justify-between gap-3 px-4 py-3 border-t border-default">
+          <span class="text-xs text-muted">
+            {{ (page - 1) * PAGE_SIZE + 1 }}–{{ Math.min(page * PAGE_SIZE, sorted.length) }} of {{ sorted.length }}
+          </span>
+          <UPagination v-model:page="page" :total="sorted.length" :items-per-page="PAGE_SIZE" :sibling-count="1" />
+        </div>
       </div>
     </template>
   </UDashboardPanel>
