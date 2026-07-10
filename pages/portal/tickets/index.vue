@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { refDebounced } from '@vueuse/core'
 import { formatDistanceToNow } from 'date-fns'
 import type { IssuePriority, Ticket, TicketCategory, TicketStatus } from '~/types/database'
 
@@ -21,6 +22,9 @@ const statusFilter = ref<TicketStatus[]>([])
 const categoryFilter = ref<TicketCategory[]>([])
 const priorityFilter = ref<IssuePriority[]>([])
 const search = ref('')
+// Filter on the settled value, not every keystroke — each row renders several
+// dropdown menus, so filtering synchronously per keypress blocked paint (INP).
+const debouncedSearch = refDebounced(search, 150)
 const statusItems = TICKET_STATUSES.map((s) => ({ label: s.label, value: s.value, icon: s.icon }))
 const categoryItems = TICKET_CATEGORIES.map((c) => ({ label: c.label, value: c.value, icon: c.icon }))
 const priorityItems = ISSUE_PRIORITIES.map((p) => ({ label: p.label, value: p.value, icon: p.icon }))
@@ -30,8 +34,8 @@ const filtered = computed(() =>
     if (statusFilter.value.length && !statusFilter.value.includes(t.status)) return false
     if (categoryFilter.value.length && !categoryFilter.value.includes(t.category)) return false
     if (priorityFilter.value.length && !priorityFilter.value.includes(t.priority)) return false
-    if (search.value) {
-      const q = search.value.toLowerCase()
+    if (debouncedSearch.value) {
+      const q = debouncedSearch.value.toLowerCase()
       if (!t.subject.toLowerCase().includes(q) && !String(t.number).includes(q)) return false
     }
     return true
@@ -75,6 +79,20 @@ const sorted = computed(() => {
     const av = val(a), bv = val(b)
     return av < bv ? -dir : av > bv ? dir : 0
   })
+})
+
+// Paginate the *rendered* rows (same pattern as the staff tickets list).
+// Each row carries three dropdown menus, so rendering a long ticket history
+// at once janked typing and navigation (INP).
+const PAGE_SIZE = 25
+const page = ref(1)
+const paged = computed(() => sorted.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
+// Any change that reshapes the list jumps back to the first page...
+watch([statusFilter, categoryFilter, priorityFilter, debouncedSearch, sortPref], () => { page.value = 1 })
+// ...and never leave the current page stranded past the end after filtering.
+watch(() => sorted.value.length, (n) => {
+  const last = Math.max(1, Math.ceil(n / PAGE_SIZE))
+  if (page.value > last) page.value = last
 })
 
 function timeAgo(iso: string) {
@@ -178,7 +196,7 @@ const categoryMenu = (t: Ticket) => [TICKET_CATEGORIES.map((c) => ({
         </div>
 
         <ul class="divide-y divide-default">
-          <li v-for="t in sorted" :key="t.id" class="flex items-center gap-3 px-4 py-3 hover:bg-elevated/50">
+          <li v-for="t in paged" :key="t.id" class="flex items-center gap-3 px-4 py-3 hover:bg-elevated/50">
             <UIcon :name="statusMap[t.status].icon" :class="`text-${statusMap[t.status].color}`" class="size-4 shrink-0" />
             <NuxtLink :to="`/portal/tickets/${t.id}`" class="text-xs text-muted font-mono shrink-0 w-12 hover:underline">#{{ t.number }}</NuxtLink>
             <NuxtLink :to="`/portal/tickets/${t.id}`" class="text-sm flex-1 min-w-0 truncate hover:underline">{{ t.subject }}</NuxtLink>
@@ -201,6 +219,13 @@ const categoryMenu = (t: Ticket) => [TICKET_CATEGORIES.map((c) => ({
           </li>
           <li v-if="!sorted.length" class="p-8 text-center text-sm text-muted">No tickets match.</li>
         </ul>
+
+        <div v-if="sorted.length > PAGE_SIZE" class="flex items-center justify-between gap-3 px-4 py-3 border-t border-default">
+          <span class="text-xs text-muted">
+            {{ (page - 1) * PAGE_SIZE + 1 }}–{{ Math.min(page * PAGE_SIZE, sorted.length) }} of {{ sorted.length }}
+          </span>
+          <UPagination v-model:page="page" :total="sorted.length" :items-per-page="PAGE_SIZE" :sibling-count="1" />
+        </div>
       </div>
     </template>
   </UDashboardPanel>

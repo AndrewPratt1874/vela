@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { refDebounced } from '@vueuse/core'
 import { formatDistanceToNow } from 'date-fns'
 import type { Issue, IssuePriority, IssueStatus, IssueType, PersonRef, Project } from '~/types/database'
 
@@ -31,6 +32,9 @@ const { data: issues } = await useAsyncData('active-tasks', async () => {
 })
 
 const search = ref('')
+// Filter on the settled value, not every keystroke — re-rendering rows full of
+// popover menus synchronously per keypress blocked paint (INP).
+const debouncedSearch = refDebounced(search, 150)
 const projectFilter = ref<string[]>([])
 const statusFilter = ref<IssueStatus[]>([])
 const priorityFilter = ref<IssuePriority[]>([])
@@ -62,8 +66,8 @@ const filtered = computed(() =>
     if (typeFilter.value.length && !typeFilter.value.includes(i.type)) return false
     if (assigneeFilter.value === 'me' && i.assignee_id !== user.value?.id) return false
     if (assigneeFilter.value === 'unassigned' && i.assignee_id) return false
-    if (search.value) {
-      const q = search.value.toLowerCase()
+    if (debouncedSearch.value) {
+      const q = debouncedSearch.value.toLowerCase()
       const id = i.project ? `${i.project.key}-${i.number}`.toLowerCase() : String(i.number)
       if (!i.title.toLowerCase().includes(q) && !id.includes(q)) return false
     }
@@ -116,7 +120,7 @@ const sorted = computed(() => {
 const PAGE_SIZE = 25
 const page = ref(1)
 const paged = computed(() => sorted.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
-watch([projectFilter, statusFilter, priorityFilter, typeFilter, assigneeFilter, search, sortPref], () => { page.value = 1 })
+watch([projectFilter, statusFilter, priorityFilter, typeFilter, assigneeFilter, debouncedSearch, sortPref], () => { page.value = 1 })
 watch(() => sorted.value.length, (n) => {
   const last = Math.max(1, Math.ceil(n / PAGE_SIZE))
   if (page.value > last) page.value = last

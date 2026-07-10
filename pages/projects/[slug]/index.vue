@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { refDebounced } from '@vueuse/core'
 import type { Issue, IssuePriority, IssueStatus, IssueType, IssueWithPeople, Label, Project } from '~/types/database'
 
 const route = useRoute()
@@ -22,6 +23,9 @@ if (!project.value) {
 }
 
 const search = ref('')
+// Filter on the settled value, not every keystroke — each row renders several
+// select menus, so filtering synchronously per keypress blocked paint (INP).
+const debouncedSearch = refDebounced(search, 150)
 const statusFilter = ref<IssueStatus[]>([])
 const priorityFilter = ref<IssuePriority[]>([])
 const typeFilter = ref<IssueType[]>([])
@@ -51,7 +55,7 @@ const { assignees: members } = await useProjectAssignees(project.value.id, proje
 
 const filtered = computed(() => {
   return (issues.value ?? []).filter((issue) => {
-    if (search.value && !issue.title.toLowerCase().includes(search.value.toLowerCase())) return false
+    if (debouncedSearch.value && !issue.title.toLowerCase().includes(debouncedSearch.value.toLowerCase())) return false
     if (statusFilter.value.length && !statusFilter.value.includes(issue.status)) return false
     if (priorityFilter.value.length && !priorityFilter.value.includes(issue.priority)) return false
     if (typeFilter.value.length && !typeFilter.value.includes(issue.type)) return false
@@ -98,6 +102,21 @@ const sorted = computed(() => {
     const av = val(a), bv = val(b)
     return av < bv ? -dir : av > bv ? dir : 0
   })
+})
+
+// Paginate the *rendered* rows (same pattern as the tickets/tasks lists).
+// Filtering/sorting/search still run over the full set above, but only one
+// page is mounted at a time — each row carries several select menus, so
+// rendering hundreds at once janked typing and navigation (INP).
+const PAGE_SIZE = 25
+const page = ref(1)
+const paged = computed(() => sorted.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
+// Any change that reshapes the list jumps back to the first page...
+watch([statusFilter, priorityFilter, typeFilter, assigneeFilter, debouncedSearch, sortPref], () => { page.value = 1 })
+// ...and never leave the current page stranded past the end after filtering.
+watch(() => sorted.value.length, (n) => {
+  const last = Math.max(1, Math.ceil(n / PAGE_SIZE))
+  if (page.value > last) page.value = last
 })
 
 const statusItems = ISSUE_STATUSES.map((s) => ({ label: s.label, value: s.value, icon: s.icon }))
@@ -253,7 +272,7 @@ const rowMenu = (issue: IssueWithPeople) => [[
             </tr>
           </thead>
           <tbody>
-            <tr v-for="issue in sorted" :key="issue.id" class="group hover:bg-elevated/40">
+            <tr v-for="issue in paged" :key="issue.id" class="group hover:bg-elevated/40">
               <!-- ID -->
               <td class="px-3 py-1.5 border-b border-default align-middle">
                 <span class="font-mono text-xs text-muted">{{ project!.key }}-{{ issue.number }}</span>
@@ -506,6 +525,13 @@ const rowMenu = (issue: IssueWithPeople) => [[
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div v-if="sorted.length > PAGE_SIZE" class="flex items-center justify-between gap-3 px-4 py-3 border-t border-default">
+        <span class="text-xs text-muted">
+          {{ (page - 1) * PAGE_SIZE + 1 }}–{{ Math.min(page * PAGE_SIZE, sorted.length) }} of {{ sorted.length }}
+        </span>
+        <UPagination v-model:page="page" :total="sorted.length" :items-per-page="PAGE_SIZE" :sibling-count="1" />
       </div>
     </template>
   </UDashboardPanel>

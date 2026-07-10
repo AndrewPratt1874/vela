@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { refDebounced } from '@vueuse/core'
 import { formatDistanceToNow } from 'date-fns'
 import type { Customer, IssuePriority, PersonRef, Ticket, TicketCategory, TicketStatus } from '~/types/database'
 
@@ -26,6 +27,9 @@ const statusFilter = ref<TicketStatus[]>([])
 const categoryFilter = ref<TicketCategory[]>([])
 const priorityFilter = ref<IssuePriority[]>([])
 const search = ref('')
+// Filter on the settled value, not every keystroke — re-rendering rows full of
+// popover menus synchronously per keypress blocked paint (INP).
+const debouncedSearch = refDebounced(search, 150)
 const statusItems = TICKET_STATUSES.map((s) => ({ label: s.label, value: s.value, icon: s.icon }))
 const categoryItems = TICKET_CATEGORIES.map((c) => ({ label: c.label, value: c.value, icon: c.icon }))
 const priorityItems = ISSUE_PRIORITIES.map((p) => ({ label: p.label, value: p.value, icon: p.icon }))
@@ -38,8 +42,8 @@ const filtered = computed(() =>
     if (statusFilter.value.length && !statusFilter.value.includes(t.status)) return false
     if (categoryFilter.value.length && !categoryFilter.value.includes(t.category)) return false
     if (priorityFilter.value.length && !priorityFilter.value.includes(t.priority)) return false
-    if (search.value) {
-      const q = search.value.toLowerCase()
+    if (debouncedSearch.value) {
+      const q = debouncedSearch.value.toLowerCase()
       if (!t.subject.toLowerCase().includes(q) && !String(t.number).includes(q)) return false
     }
     return true
@@ -95,7 +99,7 @@ const PAGE_SIZE = 25
 const page = ref(1)
 const paged = computed(() => sorted.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
 // Any change that reshapes the list jumps back to the first page...
-watch([statusFilter, categoryFilter, priorityFilter, search, sortPref], () => { page.value = 1 })
+watch([statusFilter, categoryFilter, priorityFilter, debouncedSearch, sortPref], () => { page.value = 1 })
 // ...and never leave the current page stranded past the end after filtering.
 watch(() => sorted.value.length, (n) => {
   const last = Math.max(1, Math.ceil(n / PAGE_SIZE))
