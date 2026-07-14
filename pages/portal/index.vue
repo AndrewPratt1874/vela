@@ -21,6 +21,7 @@ const { data: projects } = await useAsyncData('portal-projects', async () => {
     .from('projects')
     .select('*')
     .eq('customer_id', customerId.value)
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
   return (data ?? []) as Project[]
 }, { watch: [customerId] })

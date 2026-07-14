@@ -2,19 +2,38 @@
 import type { Project } from '~/types/database'
 
 const supabase = useSupabaseClient()
+const toast = useToast()
+const { isStaff } = useCurrentProfile()
 
-type ProjectRow = Project & { customer: { name: string, slug: string, logo_url: string | null } | null }
+type ProjectRow = Project & {
+  customer: { name: string, slug: string, logo_url: string | null } | null
+  issues: { status: string }[]
+}
 
 const { data: projects, refresh } = await useAsyncData('projects-list', async () => {
   const { data } = await supabase
     .from('projects')
-    .select('*, customer:customers(name, slug, logo_url)')
+    .select('*, customer:customers(name, slug, logo_url), issues(status)')
     .order('created_at', { ascending: false })
   return (data ?? []) as ProjectRow[]
 })
 
+// A project is completed when it has issues and none of them are still open.
+const isCompleted = (p: ProjectRow) =>
+  p.issues.length > 0 && p.issues.every((i) => i.status === 'done' || i.status === 'cancelled')
+const doneCount = (p: ProjectRow) =>
+  p.issues.filter((i) => i.status === 'done' || i.status === 'cancelled').length
+
 const search = ref('')
 const customerFilter = ref<string | null>(null) // null = all, '__none__' = unassigned
+// Archived projects only show under the Archived view.
+const view = ref<'all' | 'active' | 'completed' | 'archived'>('all')
+const viewOptions = [
+  { label: 'All projects', value: 'all' },
+  { label: 'Active', value: 'active' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Archived', value: 'archived' },
+]
 
 const customerOptions = computed(() => {
   const byName = new Map<string, string>() // slug -> name
@@ -34,6 +53,9 @@ const customerOptions = computed(() => {
 const filteredProjects = computed(() => {
   const q = search.value.trim().toLowerCase()
   return (projects.value ?? []).filter((p) => {
+    if (view.value === 'archived' ? !p.archived_at : p.archived_at) return false
+    if (view.value === 'active' && isCompleted(p)) return false
+    if (view.value === 'completed' && !isCompleted(p)) return false
     if (customerFilter.value === '__none__' && p.customer) return false
     if (customerFilter.value && customerFilter.value !== '__none__' && p.customer?.slug !== customerFilter.value) return false
     if (!q) return true
@@ -44,6 +66,25 @@ const filteredProjects = computed(() => {
     )
   })
 })
+
+async function setArchived(project: ProjectRow, archived: boolean) {
+  const { error } = await supabase
+    .from('projects')
+    .update({ archived_at: archived ? new Date().toISOString() : null })
+    .eq('id', project.id)
+  if (error) {
+    toast.add({ title: archived ? 'Archive failed' : 'Restore failed', description: error.message, color: 'error' })
+    return
+  }
+  toast.add({ title: `${project.name} ${archived ? 'archived' : 'restored'}`, color: 'success' })
+  await refresh()
+}
+
+const cardMenu = (project: ProjectRow) => [[
+  project.archived_at
+    ? { label: 'Restore project', icon: 'i-lucide-archive-restore', onSelect: () => setArchived(project, false) }
+    : { label: 'Archive project', icon: 'i-lucide-archive', onSelect: () => setArchived(project, true) },
+]]
 </script>
 
 <template>
@@ -94,6 +135,13 @@ const filteredProjects = computed(() => {
               icon="i-lucide-building-2"
               class="sm:w-56"
             />
+            <USelectMenu
+              v-model="view"
+              :items="viewOptions"
+              value-key="value"
+              icon="i-lucide-layers"
+              class="sm:w-44"
+            />
           </div>
 
           <div v-if="filteredProjects.length" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -103,10 +151,23 @@ const filteredProjects = computed(() => {
               :to="`/projects/${project.slug}`"
               class="block"
             >
-              <UCard class="hover:border-primary transition h-full">
-                <div class="flex items-start justify-between mb-1">
+              <UCard class="hover:border-primary transition h-full" :class="project.archived_at ? 'opacity-70' : ''">
+                <div class="flex items-start justify-between gap-2 mb-1">
                   <span class="font-medium">{{ project.name }}</span>
-                  <UBadge variant="outline" size="sm" :label="project.key" />
+                  <div class="flex items-center gap-1 shrink-0">
+                    <UBadge variant="outline" size="sm" :label="project.key" />
+                    <UDropdownMenu v-if="isStaff" :items="cardMenu(project)" :content="{ align: 'end' }">
+                      <UButton
+                        variant="ghost"
+                        color="neutral"
+                        icon="i-lucide-ellipsis"
+                        size="xs"
+                        square
+                        aria-label="Project actions"
+                        @click.prevent
+                      />
+                    </UDropdownMenu>
+                  </div>
                 </div>
                 <div class="flex items-center gap-1.5 text-sm text-muted mb-2">
                   <CustomerLogo :name="project.customer?.name ?? 'No customer'" :src="project.customer?.logo_url" size="3xs" />
@@ -116,6 +177,14 @@ const filteredProjects = computed(() => {
                   {{ project.description }}
                 </p>
                 <p v-else class="text-sm text-dimmed italic">No description</p>
+                <div class="flex items-center gap-2 mt-3">
+                  <UBadge v-if="project.archived_at" variant="subtle" color="neutral" size="sm" icon="i-lucide-archive" label="Archived" />
+                  <UBadge v-else-if="isCompleted(project)" variant="subtle" color="success" size="sm" icon="i-lucide-check-circle-2" label="Completed" />
+                  <span v-if="project.issues.length" class="text-xs text-dimmed">
+                    {{ doneCount(project) }}/{{ project.issues.length }} issues done
+                  </span>
+                  <span v-else class="text-xs text-dimmed">No issues yet</span>
+                </div>
               </UCard>
             </NuxtLink>
           </div>
@@ -123,7 +192,7 @@ const filteredProjects = computed(() => {
           <div v-else class="rounded-lg border border-dashed border-default p-12 text-center">
             <UIcon name="i-lucide-search-x" class="size-10 mx-auto mb-3 text-dimmed" />
             <h2 class="font-semibold mb-1">No matching projects</h2>
-            <p class="text-sm text-muted">Try a different search or customer filter.</p>
+            <p class="text-sm text-muted">Try a different search or filter.</p>
           </div>
         </template>
       </div>

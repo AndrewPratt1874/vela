@@ -32,6 +32,7 @@ const typeFilter = ref<IssueType[]>([])
 const assigneeFilter = ref<'all' | 'me' | 'unassigned'>('all')
 
 const user = useSupabaseUser()
+const { isStaff } = useCurrentProfile()
 
 const { data: issues, refresh } = await useAsyncData(
   () => `issues-${project.value!.id}`,
@@ -208,6 +209,27 @@ async function deleteIssue(issue: IssueWithPeople) {
   issues.value = (issues.value ?? []).filter((i) => i.id !== issue.id)
   toast.add({ title: `${project.value!.key}-${issue.number} deleted`, color: 'success' })
 }
+// A project is completed when it has issues and none of them are still open.
+const projectCompleted = computed(() => {
+  const all = issues.value ?? []
+  return all.length > 0 && all.every((i) => i.status === 'done' || i.status === 'cancelled')
+})
+
+const archiving = ref(false)
+async function setArchived(archived: boolean) {
+  if (!project.value || archiving.value) return
+  archiving.value = true
+  const archived_at = archived ? new Date().toISOString() : null
+  const { error } = await supabase.from('projects').update({ archived_at }).eq('id', project.value.id)
+  archiving.value = false
+  if (error) {
+    toast.add({ title: archived ? 'Archive failed' : 'Restore failed', description: error.message, color: 'error' })
+    return
+  }
+  project.value = { ...project.value, archived_at }
+  toast.add({ title: `${project.value.name} ${archived ? 'archived' : 'restored'}`, color: 'success' })
+}
+
 const rowMenu = (issue: IssueWithPeople) => [[
   { label: 'Open', icon: 'i-lucide-maximize-2', to: `/projects/${slug.value}/issues/${issue.number}` },
   { label: 'Delete issue', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => deleteIssue(issue) },
@@ -221,9 +243,21 @@ const rowMenu = (issue: IssueWithPeople) => [[
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #trailing>
+          <UBadge v-if="project!.archived_at" variant="subtle" color="neutral" size="sm" icon="i-lucide-archive" label="Archived" />
+          <UBadge v-else-if="projectCompleted" variant="subtle" color="success" size="sm" icon="i-lucide-check-circle-2" label="Completed" />
+        </template>
         <template #right>
           <UButton :to="`/projects/${slug}/board`" variant="ghost" icon="i-lucide-kanban" label="Board" />
           <UButton :to="`/projects/${slug}/files`" variant="ghost" icon="i-lucide-folder" label="Files" />
+          <UButton
+            v-if="isStaff && !project!.archived_at"
+            variant="ghost"
+            icon="i-lucide-archive"
+            label="Archive"
+            :loading="archiving"
+            @click="setArchived(true)"
+          />
           <UButton :to="`/projects/${slug}/issues/new`" icon="i-lucide-plus" label="New issue" color="primary" />
         </template>
       </UDashboardNavbar>
@@ -243,6 +277,17 @@ const rowMenu = (issue: IssueWithPeople) => [[
     </template>
 
     <template #body>
+      <UAlert
+        v-if="project!.archived_at"
+        icon="i-lucide-archive"
+        color="neutral"
+        variant="subtle"
+        title="This project is archived"
+        description="It's hidden from the sidebar, dashboard, and portal."
+        class="m-4 lg:mx-6"
+        :actions="isStaff ? [{ label: 'Restore project', icon: 'i-lucide-archive-restore', color: 'neutral', variant: 'outline', loading: archiving, onClick: () => setArchived(false) }] : []"
+      />
+
       <div class="overflow-x-auto">
         <table class="w-full text-sm border-separate border-spacing-0 min-w-[920px]">
           <thead class="sticky top-0 z-10 bg-default">

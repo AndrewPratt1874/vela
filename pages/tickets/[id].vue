@@ -80,6 +80,7 @@ const { data: projects } = await useAsyncData(`ticket-cust-projects-${id.value}`
     .from('projects')
     .select('id, name, slug, key')
     .eq('customer_id', ticket.value!.customer_id)
+    .is('archived_at', null)
     .order('name')
   return (data ?? []) as Pick<Project, 'id' | 'name' | 'slug' | 'key'>[]
 }, { watch: [() => ticket.value?.customer_id] })

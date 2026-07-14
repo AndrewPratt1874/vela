@@ -13,6 +13,7 @@ const { data: projects } = await useAsyncData('sidebar-projects', async () => {
   const { data } = await supabase
     .from('projects')
     .select('id, name, slug, key')
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
   return data ?? []
 }, { watch: [user] })

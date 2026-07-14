@@ -19,6 +19,7 @@ const { data: projects } = await useAsyncData('overview-projects', async () => {
   const { data } = await supabase
     .from('projects')
     .select('*, customer:customers(id, name, slug, logo_url)')
+    .is('archived_at', null)
     .order('updated_at', { ascending: false })
     .limit(6)
   return (data ?? []) as ProjectWithCustomer[]
@@ -28,7 +29,8 @@ const { data: myIssues } = await useAsyncData('overview-my-issues', async () => 
   if (!user.value) return []
   const { data } = await supabase
     .from('issues')
-    .select('*, project:projects(name, slug, key), assignee:profiles!issues_assignee_id_fkey(id, full_name, email, avatar_url), reporter:profiles!issues_reporter_id_fkey(id, full_name, email, avatar_url)')
+    .select('*, project:projects!inner(name, slug, key, archived_at), assignee:profiles!issues_assignee_id_fkey(id, full_name, email, avatar_url), reporter:profiles!issues_reporter_id_fkey(id, full_name, email, avatar_url)')
+    .is('project.archived_at', null)
     .eq('assignee_id', user.value.id)
     .neq('status', 'done')
     .neq('status', 'cancelled')

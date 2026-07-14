@@ -24,8 +24,10 @@ type Row = Issue & {
 const { data: issues } = await useAsyncData('active-tasks', async () => {
   const { data } = await supabase
     .from('issues')
-    .select('*, project:projects(id, name, slug, key), assignee:profiles!issues_assignee_id_fkey(id, full_name, email, avatar_url)')
-    // Only work that still needs doing — terminal states are excluded server-side.
+    .select('*, project:projects!inner(id, name, slug, key, archived_at), assignee:profiles!issues_assignee_id_fkey(id, full_name, email, avatar_url)')
+    // Only work that still needs doing — terminal states are excluded
+    // server-side, and archived projects drop out of the queue entirely.
+    .is('project.archived_at', null)
     .not('status', 'in', '(done,cancelled)')
     .order('updated_at', { ascending: false })
   return (data ?? []) as Row[]

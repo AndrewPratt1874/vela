@@ -145,7 +145,7 @@ export default defineEventHandler(async (event) => {
       }
 
       try {
-        await sendNotificationEmail(r.email, subject, content!)
+        await sendNotificationEmail(r.email, subject, content!, { replyTo: ticketReplyTo(ticket.id) })
         sent++
       } catch (err) {
         console.error('[notify] email failed for', r.email, err)

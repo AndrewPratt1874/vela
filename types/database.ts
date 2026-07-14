@@ -41,6 +41,7 @@ export type Project = {
   description: string | null
   owner_id: string
   customer_id: string | null
+  archived_at: string | null
   created_at: string
   updated_at: string
 }
@@ -138,6 +139,14 @@ export type Notification = {
   created_at: string
 }
 
+export type InboundEmail = {
+  message_id: string
+  ticket_id: string | null
+  sender: string | null
+  recipient: string | null
+  created_at: string
+}
+
 export type PersonRef = Pick<Profile, 'id' | 'full_name' | 'email' | 'avatar_url'>
 
 export type TicketWithPeople = Ticket & {
@@ -175,7 +184,7 @@ export interface Database {
       }
       projects: {
         Row: Project
-        Insert: Omit<Project, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+        Insert: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'archived_at'> & { id?: string, archived_at?: string | null }
         Update: Partial<Project>
         Relationships: []
       }
@@ -246,6 +255,12 @@ export interface Database {
         Row: TicketEvent
         Insert: Omit<TicketEvent, 'id' | 'created_at'> & { id?: string }
         Update: Partial<TicketEvent>
+        Relationships: []
+      }
+      inbound_emails: {
+        Row: InboundEmail
+        Insert: Pick<InboundEmail, 'message_id'> & Partial<Omit<InboundEmail, 'message_id' | 'created_at'>>
+        Update: Partial<InboundEmail>
         Relationships: []
       }
     }

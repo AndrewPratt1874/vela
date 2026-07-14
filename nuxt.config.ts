@@ -27,6 +27,14 @@ export default defineNuxtConfig({
       from: process.env.MAIL_FROM || 'noreply@codable.online',
       fromName: process.env.MAIL_FROM_NAME || 'Vela',
     },
+    mailgun: {
+      // HTTP webhook signing key (Mailgun dashboard → Webhooks). Verifies
+      // inbound POSTs are genuinely from Mailgun. Required to accept mail.
+      signingKey: process.env.MAILGUN_SIGNING_KEY || '',
+      // Domain the inbound route receives on, e.g. "inbound.codable.online".
+      // Used to build per-ticket Reply-To addresses (ticket+<id>@<domain>).
+      inboundDomain: process.env.MAILGUN_INBOUND_DOMAIN || '',
+    },
     public: {
       appName: 'Vela',
       appUrl: process.env.APP_URL || 'http://localhost:3000',

@@ -185,9 +185,12 @@ async function removeDomain(domain: string) {
           <div v-else class="grid sm:grid-cols-2 gap-4">
             <NuxtLink v-for="project in projects" :key="project.id" :to="`/projects/${project.slug}`" class="block">
               <UCard class="hover:border-primary transition h-full">
-                <div class="flex items-start justify-between mb-1">
+                <div class="flex items-start justify-between gap-2 mb-1">
                   <span class="font-medium">{{ project.name }}</span>
-                  <UBadge variant="outline" size="sm" :label="project.key" />
+                  <div class="flex items-center gap-1 shrink-0">
+                    <UBadge v-if="project.archived_at" variant="subtle" color="neutral" size="sm" label="Archived" />
+                    <UBadge variant="outline" size="sm" :label="project.key" />
+                  </div>
                 </div>
                 <p v-if="project.description" class="text-sm text-muted line-clamp-2">
                   {{ project.description }}
