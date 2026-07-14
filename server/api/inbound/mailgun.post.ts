@@ -177,7 +177,10 @@ async function isStaffSender(admin: Admin, email: string): Promise<boolean> {
     const { data: sd } = await admin.from('staff_domains').select('domain').eq('domain', domain).maybeSingle()
     if (sd) return true
   }
-  const { data: p } = await admin.from('profiles').select('is_staff').ilike('email', email).maybeSingle()
+  // Exact match only — ilike would let %/_ wildcards in a spoofed sender
+  // address match someone else's profile. parseAddress already lowercased,
+  // and auth stores emails lowercased, so eq is case-safe.
+  const { data: p } = await admin.from('profiles').select('is_staff').eq('email', email).maybeSingle()
   return p?.is_staff ?? false
 }
 
@@ -229,7 +232,9 @@ async function resolveCustomer(admin: Admin, email: string): Promise<string> {
  * a confirmation email — staff invite/approve through the existing flow.
  */
 async function findOrCreateContact(admin: Admin, email: string, name: string | null): Promise<string> {
-  const { data: existing } = await admin.from('profiles').select('id').ilike('email', email).maybeSingle()
+  // eq, not ilike: wildcard-bearing sender addresses must never resolve to
+  // another user's profile (identity spoofing). Emails are stored lowercased.
+  const { data: existing } = await admin.from('profiles').select('id').eq('email', email).maybeSingle()
   if (existing) return existing.id
 
   const { data: created, error } = await admin.auth.admin.createUser({
@@ -240,7 +245,7 @@ async function findOrCreateContact(admin: Admin, email: string, name: string | n
   if (created?.user) return created.user.id
 
   // Lost a race (or the user already existed) — re-read.
-  const { data: again } = await admin.from('profiles').select('id').ilike('email', email).maybeSingle()
+  const { data: again } = await admin.from('profiles').select('id').eq('email', email).maybeSingle()
   if (again) return again.id
   throw error ?? new Error('Could not provision contact for ' + email)
 }
