@@ -23,11 +23,26 @@ async function onClick(n: Notification) {
 function timeAgo(iso: string) {
   return formatDistanceToNow(new Date(iso), { addSuffix: true })
 }
+
+// Notification bodies can contain rich-text/HTML (e.g. reply bodies). Strip
+// tags and decode common entities so the preview reads as plain text.
+function preview(html: string) {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 </script>
 
 <template>
   <UPopover v-model:open="open" :content="{ align: 'end', side: 'right' }">
-    <UChip :show="unreadCount > 0" :text="unreadCount" size="2xl" color="error">
+    <UChip :show="unreadCount > 0" :text="unreadCount" size="2xl" color="error" :ui="{ base: 'px-1 min-w-[1.25rem]' }">
       <UButton color="neutral" variant="ghost" icon="i-lucide-bell" square aria-label="Notifications" />
     </UChip>
 
@@ -61,7 +76,7 @@ function timeAgo(iso: string) {
             <span class="mt-1.5 size-2 rounded-full shrink-0" :class="n.read ? 'bg-transparent' : 'bg-primary'" />
             <span class="min-w-0">
               <span class="block text-sm font-medium truncate">{{ n.title }}</span>
-              <span v-if="n.body" class="block text-xs text-muted truncate">{{ n.body }}</span>
+              <span v-if="n.body" class="block text-xs text-muted truncate">{{ preview(n.body) }}</span>
               <span class="block text-xs text-dimmed mt-0.5">{{ timeAgo(n.created_at) }}</span>
             </span>
           </button>
