@@ -3,12 +3,17 @@ export interface CsvColumn<T> {
   value: (row: T) => string | number | null | undefined
 }
 
+// Excel/Sheets/LibreOffice treat a leading =, +, - or @ as a formula, and they
+// skip leading whitespace and control characters when deciding, so a title of
+// "<tab>=cmd|..." evaluates just like "=cmd|...". Match the whole ignorable
+// prefix rather than only character 0, or the guard is trivially bypassed.
+const FORMULA_PREFIX = /^[\s\x00-\x1f]*[=+\-@]/
+
 function escapeCell(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return ''
   const s = String(value)
-  // Excel treats a leading =, +, - or @ as a formula. Prefix with a quote so
-  // exported titles can't execute in the recipient's spreadsheet.
-  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s
+  // Leading apostrophe is the standard mitigation: the cell renders as text.
+  const safe = FORMULA_PREFIX.test(s) ? `'${s}` : s
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
