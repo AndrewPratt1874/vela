@@ -230,6 +230,30 @@ async function setArchived(archived: boolean) {
   toast.add({ title: `${project.value.name} ${archived ? 'archived' : 'restored'}`, color: 'success' })
 }
 
+// ---- Export -------------------------------------------------------------
+// Exports what's on screen (current filters + sort order), not the raw set —
+// the filters are the point of the export.
+const { downloadCsv } = useCsvExport()
+function exportCsv() {
+  const p = project.value!
+  downloadCsv<IssueWithPeople>(
+    `${p.key}-issues-${new Date().toISOString().slice(0, 10)}.csv`,
+    [
+      { header: 'ID', value: (i) => `${p.key}-${i.number}` },
+      { header: 'Title', value: (i) => i.title },
+      { header: 'Type', value: (i) => typeMap[i.type].label },
+      { header: 'Status', value: (i) => statusMap[i.status].label },
+      { header: 'Priority', value: (i) => priorityMap[i.priority].label },
+      { header: 'Assignee', value: (i) => i.assignee?.full_name ?? i.assignee?.email ?? '' },
+      { header: 'Reporter', value: (i) => i.reporter?.full_name ?? i.reporter?.email ?? '' },
+      { header: 'Labels', value: (i) => (i.labels ?? []).map((l) => l.name).join(', ') },
+      { header: 'Due date', value: (i) => i.due_date ?? '' },
+      { header: 'Created', value: (i) => i.created_at.slice(0, 10) },
+    ],
+    sorted.value,
+  )
+}
+
 const rowMenu = (issue: IssueWithPeople) => [[
   { label: 'Open', icon: 'i-lucide-maximize-2', to: `/projects/${slug.value}/issues/${issue.number}` },
   { label: 'Delete issue', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => deleteIssue(issue) },
@@ -272,6 +296,15 @@ const rowMenu = (issue: IssueWithPeople) => [[
         </template>
         <template #right>
           <span class="text-xs text-muted">{{ filtered.length }} / {{ issues?.length ?? 0 }}</span>
+          <UButton
+            variant="ghost"
+            color="neutral"
+            size="sm"
+            icon="i-lucide-sheet"
+            label="Export"
+            :disabled="!sorted.length"
+            @click="exportCsv"
+          />
         </template>
       </UDashboardToolbar>
     </template>
