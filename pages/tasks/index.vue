@@ -132,6 +132,12 @@ function timeAgo(iso: string) {
   return formatDistanceToNow(new Date(iso), { addSuffix: true })
 }
 
+// due_date is a plain YYYY-MM-DD; split rather than new Date() to avoid a timezone shift.
+function ukDate(ymd: string) {
+  const [y, m, d] = ymd.split('-')
+  return `${d}/${m}/${y}`
+}
+
 // Inline triage. Marking an issue done/cancelled drops it from this active-only
 // view, so remove it locally on success rather than leaving a stale row.
 async function setField<K extends 'status' | 'priority'>(i: Row, key: K, value: Row[K]) {
@@ -266,7 +272,7 @@ const issueLink = (i: Row) => i.project ? `/projects/${i.project.slug}/issues/${
               />
               <UIcon v-else name="i-lucide-user" class="size-4 text-dimmed" />
             </span>
-            <span class="w-24 shrink-0 hidden xl:block text-xs" :class="i.due_date ? 'text-dimmed' : 'text-dimmed/50'">{{ i.due_date ?? '—' }}</span>
+            <span class="w-24 shrink-0 hidden xl:block text-xs" :class="i.due_date ? 'text-dimmed' : 'text-dimmed/50'">{{ i.due_date ? ukDate(i.due_date) : '—' }}</span>
             <NuxtLink :to="issueLink(i)" class="w-24 shrink-0 hidden xl:block text-xs text-dimmed hover:underline">{{ timeAgo(i.updated_at) }}</NuxtLink>
             <span class="w-8 shrink-0 flex justify-center">
               <UButton :to="issueLink(i)" icon="i-lucide-arrow-up-right" variant="ghost" color="neutral" size="xs" square class="opacity-0 group-hover:opacity-100" />
